@@ -9,3 +9,16 @@ spring:
 server:
   address: ${SERVER_ADDRESS:127.0.0.1}
   port: ${SERVER_PORT:8080}
+
+ar:
+  auth:
+    clients:
+      - token: ${AR_API_TOKEN:}
+        username: ${AR_API_USER:local-finance}
+        legal-entities: ${AR_LEGAL_ENTITIES:1}
+        permissions: ${AR_PERMISSIONS:ar:create,ar:read}
+springdoc:
+  api-docs:
+    enabled: ${AR_API_DOCS_ENABLED:false}
+  swagger-ui:
+    enabled: false

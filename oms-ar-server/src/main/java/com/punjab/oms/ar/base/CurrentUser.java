@@ -18,7 +18,7 @@ public final class CurrentUser {
   Identity identity=CONTEXT.get();
   if(identity==null)throw new ServiceException("无法获取当前操作人");
   if(legalEntityId==null || !identity.legalEntities().contains(legalEntityId) || !identity.permissions().contains(permission))
-   throw new ServiceException("无权执行该主体的业务操作");
+   throw new AccessDeniedException("无权执行该主体的业务操作");
   return identity.username();
  }
 }

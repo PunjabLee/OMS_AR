@@ -30,4 +30,16 @@ public class ReceivableDaoImpl extends CrudRepository<ArDocumentMapper,ArDocumen
  public boolean createSource(ArSource value){return sources.insert(value)==1;}
  public boolean createEvent(ArEvent value){return events.insert(value)==1;}
  public boolean createChange(ArChange value){return changes.insert(value)==1;}
+
+ public ArDocument document(com.punjab.oms.ar.domain.bo.finance.ReceivableDetailQueryBO query){
+  return baseMapper.selectOne(new LambdaQueryWrapper<ArDocument>().eq(ArDocument::getId,query.id()).eq(ArDocument::getLegalEntityId,query.legalEntityId()).eq(ArDocument::getDeleteStatus,false));
+ }
+ public java.util.List<ArLine> lines(Long documentId){return lines.selectList(new LambdaQueryWrapper<ArLine>().eq(ArLine::getDocumentId,documentId).eq(ArLine::getDeleteStatus,false).orderByAsc(ArLine::getLineNo));}
+ public java.util.List<ArSource> sources(java.util.List<Long> ids){
+  if(ids.isEmpty())return java.util.List.of();
+  return sources.selectList(new LambdaQueryWrapper<ArSource>().in(ArSource::getLineId,ids).eq(ArSource::getDeleteStatus,false));
+ }
+ public com.punjab.oms.ar.base.PageResult<ArDocument> page(com.punjab.oms.ar.domain.bo.finance.ReceivablePageQueryBO query){
+  return new com.punjab.oms.ar.base.PageResult<>(baseMapper.countActive(query),query.getPage(),query.getSize(),baseMapper.pageActive(query));
+ }
 }

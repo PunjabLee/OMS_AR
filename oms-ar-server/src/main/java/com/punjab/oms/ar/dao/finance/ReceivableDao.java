@@ -11,4 +11,9 @@ public interface ReceivableDao {
  boolean createSource(ArSource value);
  boolean createEvent(ArEvent value);
  boolean createChange(ArChange value);
+
+ ArDocument document(com.punjab.oms.ar.domain.bo.finance.ReceivableDetailQueryBO query);
+ java.util.List<ArLine> lines(Long documentId);
+ java.util.List<ArSource> sources(java.util.List<Long> lineIds);
+ com.punjab.oms.ar.base.PageResult<ArDocument> page(com.punjab.oms.ar.domain.bo.finance.ReceivablePageQueryBO query);
 }

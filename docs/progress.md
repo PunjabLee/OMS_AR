@@ -41,3 +41,9 @@
 架构裁定：ReceivableDao管理同一finance应收聚合内的document/group/line/source/operation/event/change，Service不跨业务模块DAO。审计字段显式填充，主键自增，JSON快照包含创建对象与税率。未开放HTTP写入口，鉴权适配、详情分页和生命周期查询下一任务补齐；汇率差异计算依据表、原行调整关联、核销确认、余额、开票和作废仍未实现，不算整体完成。
 
 下阶段具体接口：ReceivableService.detail(ReceivableDetailQuery)->ReceivableResponse，查询经Query转BO进入DAO，返回VO含逐行余额/来源/税率、按金额类型汇总；结清逐行判断不能按净额零。随后接HTTP认证与只用GET/POST的控制器。测试数据仅落oms_ar_test，演示数据库oms_ar尚未部署业务表。
+
+任务5a完成：ReceivableQueryService详情与分页；Query经MapStruct转换为BO，DAO不接收Web Query；只返回VO。详情按金额类型汇总、逐行返回来源，结算状态依据逐行余额；正负净额零不误判结清。分页限定主体与可选客户，数据和count使用相同过滤、创建时间/ID稳定排序、分页上限200。多表读使用只读REPEATABLE_READ事务以保持快照一致（明确例外于默认查询无事务）。
+
+验证：新增6项实库查询用例，创建/查询14项全部通过；默认15项通过、20项实库门禁跳过。work/query-red.log证明查询占位4项失败；work/query-final.log为14项实库绿灯；work/query-default.log为全模块默认绿灯。第一次受限运行失败源于Mockito无法自附加JVM，不属于业务红灯；恢复正常本机执行权限后重跑确认真正业务红灯再实现。
+
+下一任务：HTTP鉴权适配/ApiReturn/异常映射/应收创建详情分页控制器（仅GET/POST，动作对象请求体），以及生命周期只读查询。业务服务不能被误当作已经开放HTTP接口。之后核销确认和反核销、余额、开票、作废仍按完整计划推进。

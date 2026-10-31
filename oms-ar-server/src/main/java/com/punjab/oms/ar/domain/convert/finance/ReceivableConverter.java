@@ -12,4 +12,10 @@ public interface ReceivableConverter {
  @Mapping(target="id",ignore=true) @Mapping(target="createdTime",ignore=true) @Mapping(target="createdBy",ignore=true)
  @Mapping(target="updatedTime",ignore=true) @Mapping(target="updatedBy",ignore=true) @Mapping(target="deleteStatus",ignore=true)
  ArLine toEntity(ReceivableCreateRequest.Line request);
+
+ com.punjab.oms.ar.domain.bo.finance.ReceivableDetailQueryBO toDetailQueryBO(com.punjab.oms.ar.domain.query.finance.ReceivableDetailQuery query);
+ com.punjab.oms.ar.domain.bo.finance.ReceivablePageQueryBO toPageQueryBO(com.punjab.oms.ar.domain.query.finance.ReceivablePageQuery query);
+ com.punjab.oms.ar.domain.vo.finance.ReceivableResponse.Document toResponse(ArDocument entity);
+ com.punjab.oms.ar.domain.vo.finance.ReceivableResponse.Source toResponse(ArSource entity);
+ com.punjab.oms.ar.domain.vo.finance.ReceivableResponse.Line toResponse(ArLine line,com.punjab.oms.ar.domain.vo.finance.ReceivableResponse.Source source);
 }

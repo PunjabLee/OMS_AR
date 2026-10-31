@@ -53,3 +53,9 @@
 验证：HTTP占位红灯4个预期断言失败；最终26项默认测试通过、21项实库门禁跳过（work/http-final-default.log）。真实随机端口HTTP+MySQL测试通过：无凭据401、创建、重复返回原ID、详情余额100（work/http-real.log）。OpenAPI注解已添加，springdoc2.8.9文档默认关闭，启用后也需要鉴权。说明docs/http-api.md。
 
 下一步主线：核销确认/反核销，需落地settlement/allocation/收款可用余额并验证事务和并发；生命周期查询可在各事件齐全后统一完成。尚未完成：汇率差异依据持久化、原行调整关联、核销、客户余额、开票、作废、生命周期查询、整体对账。不能将当前创建/查询HTTP闭环等同完整系统交付。
+
+任务6a完成：真实收款登记、独立可用余额、来源唯一约束与HTTP查询；FinanceJournalService以MANDATORY加入外层事务，提供后续核销/余额/开票共用的幂等占位及前后快照追加。收款不等于客户信用余额，无核销时allocated=0。
+
+验证：4项收款实库用例红转绿（首次测试导入异常名冲突已修复，随后4条真正业务失败），26项默认用例通过，真实HTTP创建/查询收款及原应收链路通过。日志work/receipt-red.log、work/receipt-green.log、work/receipt-default.log、work/receipt-http.log。来源冲突回滚资金及幂等占位；收款登记权限ar:receipt:create，普通ar:create不赋予记账资金权限。
+
+下一细分任务明确：V004 settlement/allocation、收款核销预览→确认（预览指纹包含全部目标成员及版本，补税/余额变化须重新确认）→反核销（按原分配恢复），同事务记录receipt/line/settlement前后快照。然后正负抵销与客户信用余额。当前尚无任何收款扣减/核销确认实现。

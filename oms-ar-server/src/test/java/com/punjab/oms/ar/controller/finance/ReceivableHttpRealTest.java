@@ -25,14 +25,14 @@ class ReceivableHttpRealTest {
   p.add("spring.datasource.username",()->"oms_ar");p.add("spring.datasource.password",()->System.getenv("AR_TEST_PASSWORD"));
   p.add("ar.auth.clients[0].token",()->TOKEN);p.add("ar.auth.clients[0].username",()->"http-integration");
   p.add("ar.auth.clients[0].legal-entities[0]",()->"1");
-  p.add("ar.auth.clients[0].permissions[0]",()->"ar:create");p.add("ar.auth.clients[0].permissions[1]",()->"ar:read");
+  p.add("ar.auth.clients[0].permissions[0]",()->"ar:create");p.add("ar.auth.clients[0].permissions[1]",()->"ar:read");p.add("ar.auth.clients[0].permissions[2]",()->"ar:receipt:create");
  }
  @LocalServerPort int port;
  @Autowired JdbcTemplate jdbc;
  @Autowired ObjectMapper json;
  @Test @DisplayName("真实HTTP鉴权、创建、重放及详情完整闭环") void createReplayRead() throws Exception {
   assertThat(jdbc.queryForObject("SELECT DATABASE()",String.class)).isEqualTo("oms_ar_test");
-  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql"))for(String sql:Files.readString(Path.of("../scratch/dbddl/"+name)).split(";"))if(!sql.isBlank())jdbc.execute(sql);
+  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql","V003__ar_receipt.sql"))for(String sql:Files.readString(Path.of("../scratch/dbddl/"+name)).split(";"))if(!sql.isBlank())jdbc.execute(sql);
   String root="http://127.0.0.1:"+port+"/api/finance/receivables";
   String body="{\"requestKey\":\""+UUID.randomUUID()+"\",\"customerId\":1,\"legalEntityId\":1,\"currency\":\"CNY\",\"businessType\":\"SERVICE\",\"businessDate\":\"2026-10-31\",\"reason\":\"http test\",\"lines\":[{\"groupKey\":\"A\",\"amountType\":\"PRINCIPAL\",\"amount\":100}]}";
   try(var client=HttpClient.newHttpClient()){
@@ -43,6 +43,11 @@ class ReceivableHttpRealTest {
    long id=json.readTree(result.body()).get("data").asLong();assertThat(id).isPositive();
    assertThat(json.readTree(client.send(create,HttpResponse.BodyHandlers.ofString()).body()).get("data").asLong()).isEqualTo(id);
    var detail=client.send(HttpRequest.newBuilder(URI.create(root+"/detail?id="+id+"&legalEntityId=1")).header("Authorization","Bearer "+TOKEN).GET().build(),HttpResponse.BodyHandlers.ofString());
+   String receiptBody=json.writeValueAsString(java.util.Map.of("requestKey",UUID.randomUUID().toString(),"customerId",1,"legalEntityId",1,"currency","CNY","amount",120,"receivedDate","2026-10-31","sourceSystem","TEST","sourceId",UUID.randomUUID().toString(),"sourceNo","TEST-NO"));
+   var receipt=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/finance/receipts/create")).header("Authorization","Bearer "+TOKEN).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(receiptBody)).build(),HttpResponse.BodyHandlers.ofString());
+   assertThat(receipt.statusCode()).isEqualTo(200);long receiptId=json.readTree(receipt.body()).get("data").asLong();assertThat(receiptId).isPositive();
+   var balance=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/finance/receipts/detail?id="+receiptId+"&legalEntityId=1")).header("Authorization","Bearer "+TOKEN).GET().build(),HttpResponse.BodyHandlers.ofString());
+   assertThat(balance.statusCode()).isEqualTo(200);assertThat(json.readTree(balance.body()).at("/data/availableAmount").decimalValue()).isEqualByComparingTo("120");
    assertThat(detail.statusCode()).isEqualTo(200);assertThat(json.readTree(detail.body()).at("/data/principal/openAmount").decimalValue()).isEqualByComparingTo("100");
   }
  }

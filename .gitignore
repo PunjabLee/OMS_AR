@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+target/
+.idea/
+*.iml
+
+work/
+.flattened-pom.xml
+.superpowers/

@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+AR_JDK_HOME="${AR_JDK_HOME:-/Users/punjab/Library/Java/JavaVirtualMachines/ms-21.0.13.0.2/Contents/Home}"
+if [ ! -x "$AR_JDK_HOME/bin/java" ]; then
+  echo "Set AR_JDK_HOME to an installed JDK 21." >&2
+  exit 1
+fi
+JAVA_HOME="$AR_JDK_HOME" PATH="$AR_JDK_HOME/bin:$PATH" exec mvn "$@"

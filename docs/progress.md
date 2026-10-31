@@ -33,3 +33,11 @@
 任务4b：幂等请求与生命周期事件/变化三表完成。6项实库用例通过；默认15项通过、6项实库按门禁跳过。新增用例先因表不存在失败，再验证请求键按调用方隔离、JSON初始化税率快照可回读。日志work/audit-red.log、work/audit-green.log、work/audit-default.log。
 
 下一步不再扩展基础设施：实现ReceivableService.create事务编排、MyBatis实体/DAO/Mapper、DTO/VO/Converter，并以MySQL集成测试验证应收、来源、事件、幂等同时提交/回滚。身份上下文和三表尚未接入生成服务，不能声称创建功能已实现。
+
+任务4c完成：ReceivableService.create统一事务、MyBatis-Plus应收聚合DAO和映射、MapStruct请求转换、参数/币种精度校验、按组键归并/按既有组ID关联、来源记录及初始化快照。生成即ACTIVE，来源冲突回滚单据/组/事件/幂等记录。幂等以主体+可信操作人+CREATE+requestKey隔离，同键异内容拒绝，数据库占位并加锁串行化相同请求。
+
+验证：8项创建实库测试通过（含两线程同时重放、结清组追加税、失败全事务回滚、越权/精度/未知组拦截）；15项默认测试通过；14项实库测试默认门禁跳过。先执行创建服务占位红灯5项失败，后实现并扩展到8项绿灯。日志work/create-red.log、work/create-green.log、work/create-default.log。
+
+架构裁定：ReceivableDao管理同一finance应收聚合内的document/group/line/source/operation/event/change，Service不跨业务模块DAO。审计字段显式填充，主键自增，JSON快照包含创建对象与税率。未开放HTTP写入口，鉴权适配、详情分页和生命周期查询下一任务补齐；汇率差异计算依据表、原行调整关联、核销确认、余额、开票和作废仍未实现，不算整体完成。
+
+下阶段具体接口：ReceivableService.detail(ReceivableDetailQuery)->ReceivableResponse，查询经Query转BO进入DAO，返回VO含逐行余额/来源/税率、按金额类型汇总；结清逐行判断不能按净额零。随后接HTTP认证与只用GET/POST的控制器。测试数据仅落oms_ar_test，演示数据库oms_ar尚未部署业务表。

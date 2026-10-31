@@ -24,6 +24,10 @@ class ArSchemaRealTest {
         for(String sql:Files.readString(script).split(";")) if(!sql.isBlank()) {
             try(var s=db.createStatement()) {s.execute(sql);}
         }
+        Path audit=Path.of("../scratch/dbddl/V002__ar_audit.sql");
+        if(Files.exists(audit)) for(String sql:Files.readString(audit).split(";")) if(!sql.isBlank()) {
+            try(var statement=db.createStatement()){statement.execute(sql);}
+        }
         db.setAutoCommit(false);
     }
     @AfterEach void cleanup() throws Exception { if(db!=null){if(!db.getAutoCommit())db.rollback();db.close();} }
@@ -63,6 +67,21 @@ class ArSchemaRealTest {
         try(var s=db.createStatement()) {
             assertThat(s.executeUpdate("UPDATE oms_ar_line SET invoiced_amount=100 WHERE id="+id)).isEqualTo(1);
             try(var r=s.executeQuery("SELECT open_amount FROM oms_ar_line WHERE id="+id)){r.next();assertThat(r.getBigDecimal(1)).isEqualByComparingTo("100");}
+        }
+    }
+
+    @Test @DisplayName("相同调用方的请求键唯一，其他调用方隔离") void requestUniqueness() throws Exception {
+        String key=UUID.randomUUID().toString();
+        String sql="INSERT INTO oms_ar_operation_request(legal_entity_id,caller_id,operation_type,request_key,payload_hash,created_by,updated_by) VALUES (1,'OMS','CREATE','"+key+"','"+"a".repeat(64)+"','test','test')";
+        assertThat(insert(sql)).isPositive();
+        assertThatThrownBy(()->insert(sql)).isInstanceOf(SQLException.class).satisfies(e->assertThat(((SQLException)e).getErrorCode()).isEqualTo(1062));
+        assertThat(insert(sql.replace("'OMS'","'OTHER'"))).isPositive();
+    }
+    @Test @DisplayName("初始化快照和事件可原样关联读取") void initializationSnapshot() throws Exception {
+        long event=insert("INSERT INTO oms_ar_lifecycle_event(event_type,occurred_at,actor,correlation_id,created_by,updated_by) VALUES ('CREATED',NOW(6),'test','"+UUID.randomUUID()+"','test','test')");
+        insert("INSERT INTO oms_ar_lifecycle_change(event_id,object_type,object_id,before_snapshot,delta_snapshot,after_snapshot,before_version,after_version,created_by,updated_by) VALUES ("+event+",'LINE',99,NULL,JSON_OBJECT('openAmount','13.00'),JSON_OBJECT('openAmount','13.00','taxRate','0.13'),NULL,0,'test','test')");
+        try(var statement=db.createStatement();var rows=statement.executeQuery("SELECT JSON_UNQUOTE(JSON_EXTRACT(after_snapshot,'$.taxRate')) FROM oms_ar_lifecycle_change WHERE event_id="+event)) {
+            assertThat(rows.next()).isTrue();assertThat(rows.getString(1)).isEqualTo("0.13");
         }
     }
 }

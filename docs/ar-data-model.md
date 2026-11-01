@@ -39,3 +39,13 @@
 line 建 document_id/line_no 唯一索引、group_id/status/id 查询索引；document 建主体/客户/币种/状态/到期日查询索引；分配表为双方应收ID建追溯索引；事件变化为object_type/object_id/event_id建索引。
 
 来源幂等不依赖可空source_line_id，避免无行ID时重复生成。请求唯一性与业务行版本均需数据库约束兜底。金额更新使用行锁或version条件更新，零行更新视为冲突并回滚。使用InnoDB；DDL正式编写时逐项实现外键、CHECK和唯一约束并以MySQL实库用例验证。
+
+## 已落地的余额结构（V006–V007）
+
+逻辑模型中的账户落地为 `customer_account`，余额字段为 `balance_amount`。每次转入直接生成 `balance_lot`，保存 `source_line_id`、原额 `amount`、已使用额 `used_amount`、`status` 和版本，不另建同义的转入单表。转入/撤销的操作键与逆向关联分别由 `operation_request`、`lifecycle_event` 管理。
+
+余额抵扣使用既有 `settlement`（类型BALANCE）及 `settlement_allocation` 保存应收分配；`balance_settlement` 记录账户，`balance_usage` 记录每条应收分配对应的来源批次和金额。一条应收分配可以使用多个来源批次，因此批次ID没有直接放在应收分配表上。收款来源保存在收款核销单的 `receipt_id`，正负抵销来源保存在分配的 `negative_line_id`。
+
+账户和批次的前额、变动额、后额及版本写入共用 `lifecycle_change`，不另建重复的 `balance_entry`。批次和分配记录均保留，撤销由核销/批次状态及逆向事件表达。
+
+守恒条件：账户余额等于所有ACTIVE批次的 `amount-used_amount` 合计；一笔余额核销的每条应收分配金额等于其批次使用明细合计，全部使用明细合计等于核销单金额。反核销恢复原批次，不重新运行FIFO。原应收的 `transferred_amount` 只在转入及撤销转入时变化，余额后续抵扣不重复修改该来源应收。

@@ -32,7 +32,7 @@ class ReceivableHttpRealTest {
  @Autowired ObjectMapper json;
  @Test @DisplayName("真实HTTP鉴权、创建、重放及详情完整闭环") void createReplayRead() throws Exception {
   assertThat(jdbc.queryForObject("SELECT DATABASE()",String.class)).isEqualTo("oms_ar_test");
-  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql","V003__ar_receipt.sql","V004__ar_settlement.sql","V005__ar_adjustment_link.sql","V006__ar_customer_balance.sql"))for(String sql:Files.readString(Path.of("../scratch/dbddl/"+name)).split(";"))if(!sql.isBlank())jdbc.execute(sql);
+  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql","V003__ar_receipt.sql","V004__ar_settlement.sql","V005__ar_adjustment_link.sql","V006__ar_customer_balance.sql","V007__ar_balance_settlement.sql"))for(String sql:Files.readString(Path.of("../scratch/dbddl/"+name)).split(";"))if(!sql.isBlank())jdbc.execute(sql);
   String root="http://127.0.0.1:"+port+"/api/finance/receivables";
   String body="{\"requestKey\":\""+UUID.randomUUID()+"\",\"customerId\":1,\"legalEntityId\":1,\"currency\":\"CNY\",\"businessType\":\"SERVICE\",\"businessDate\":\"2026-10-31\",\"reason\":\"http test\",\"lines\":[{\"groupKey\":\"A\",\"amountType\":\"PRINCIPAL\",\"amount\":100}]}";
   try(var client=HttpClient.newHttpClient()){
@@ -74,6 +74,11 @@ class ReceivableHttpRealTest {
    String balancesRoot="http://127.0.0.1:"+port+"/api/finance/customer-balances";
    long lotId=post(client,balancesRoot+"/transfer",Map.of("requestKey",UUID.randomUUID().toString(),"legalEntityId",1,"negativeLineId",creditLine,"amount",7,"expectedLineVersion",creditVersion,"reason","http credit transfer")).get("data").asLong();assertThat(lotId).isPositive();
    var lotResult=client.send(HttpRequest.newBuilder(URI.create(balancesRoot+"/lot-detail?id="+lotId+"&legalEntityId=1")).header("Authorization","Bearer "+TOKEN).GET().build(),HttpResponse.BodyHandlers.ofString());assertThat(lotResult.statusCode()).isEqualTo(200);assertThat(json.readTree(lotResult.body()).at("/data/sourceLineId").asLong()).isEqualTo(creditLine);
+   long accountId=json.readTree(lotResult.body()).at("/data/accountId").asLong();
+   var spendRequest=Map.of("legalEntityId",1,"accountId",accountId,"amount",7,"groupIds",List.of(groupId),"strategy","GROUP_TAX_FIRST");
+   var spendPreview=post(client,balancesRoot+"/settlements/preview",spendRequest);assertThat(spendPreview.at("/data/usedAmount").decimalValue()).isEqualByComparingTo("7");
+   long spendId=post(client,balancesRoot+"/settlements/confirm",Map.of("requestKey",UUID.randomUUID().toString(),"preview",spendRequest,"expectedFingerprint",spendPreview.at("/data/fingerprint").asText(),"reason","http credit spend")).get("data").asLong();assertThat(spendId).isPositive();
+   post(client,settlementRoot+"/reverse",Map.of("requestKey",UUID.randomUUID().toString(),"legalEntityId",1,"settlementId",spendId,"reason","http credit spend reverse"));
    post(client,balancesRoot+"/reverse-transfer",Map.of("requestKey",UUID.randomUUID().toString(),"legalEntityId",1,"lotId",lotId,"reason","http credit reverse"));
    assertThat(jdbc.queryForObject("SELECT open_amount FROM oms_ar_line WHERE id=?",java.math.BigDecimal.class,creditLine)).isEqualByComparingTo("-10");
    assertThat(detail.statusCode()).isEqualTo(200);assertThat(json.readTree(detail.body()).at("/data/principal/openAmount").decimalValue()).isEqualByComparingTo("100");

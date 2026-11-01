@@ -36,7 +36,7 @@ POST `/api/finance/settlements/confirm`：`requestKey`、原`preview`请求对�
 
 POST `/api/finance/settlements/reverse`：`requestKey`、`legalEntityId`、`settlementId`、`reason`，要求`ar:reverse`。整单按原分配恢复，保留原核销单和分配关系并新增逆向事件。重复反核销不会重复恢复余额。
 
-反核销入口支持收款核销与正负应收抵销；信用余额抵扣将在后续任务中接入。
+反核销入口支持收款核销与正负应收抵销；也支持信用余额抵扣的原分配恢复。
 
 ## 正负应收抵销
 
@@ -54,4 +54,12 @@ POST `/api/finance/customer-balances/transfer`：`requestKey`、`legalEntityId`�
 
 GET `/api/finance/customer-balances/lot-detail?id=批次ID&legalEntityId=主体ID` 返回来源应收行、账户ID、批次原额、已使用金额、状态及版本。GET `/api/finance/customer-balances/detail?id=账户ID&legalEntityId=主体ID` 返回账户余额和版本，两者要求 `ar:read`。
 
-POST `/api/finance/customer-balances/reverse-transfer`：`requestKey`、`legalEntityId`、`lotId`、`reason`，要求 `ar:reverse`。整批撤销；已被使用的批次必须先撤销对应余额抵扣。恢复原负数应收，扣回账户余额，保留批次和逆向流水。账户、批次、应收与流水同事务提交，不支持退款、提现或跨客户/跨币种划转。余额抵扣应收将在下一细分任务开放。
+POST `/api/finance/customer-balances/reverse-transfer`：`requestKey`、`legalEntityId`、`lotId`、`reason`，要求 `ar:reverse`。整批撤销；已被使用的批次必须先撤销对应余额抵扣。恢复原负数应收，扣回账户余额，保留批次和逆向流水。账户、批次、应收与流水同事务提交，不支持退款、提现或跨客户/跨币种划转。余额抵扣入口及批次依赖见下节。
+
+## 客户信用余额抵扣
+
+POST `/api/finance/customer-balances/settlements/preview`：`legalEntityId`、`accountId`、正数 `amount`、有序 `groupIds`、`strategy=GROUP_TAX_FIRST`。要求 `ar:settle`。所选组必须与账户客户、主体、币种一致；按用户组顺序、组内先税后价抵扣。来源批次按转入批次ID升序FIFO使用，预览显示逐行应收分配、逐行对应批次分配、实际使用额、未分配额、账户版本及fingerprint，不占余额。
+
+POST `/api/finance/customer-balances/settlements/confirm`：`requestKey`、原 `preview`、`expectedFingerprint`、`reason`。账户、可用批次、目标应收成员或余额变化均要求重新预览。确认创建BALANCE核销单，同时保存核销账户及每条应收分配对应的来源批次/金额。只扣实际使用额，其余留在账户；原转入应收的已转入金额保持不变，不增加实收。
+
+通用 `/api/finance/settlements/reverse` 按原应收及原来源批次恢复，不重新执行FIFO；原单据/分配保留，新增逆向事件。某批次仍有其他核销占用时，不能撤销该批次转入。账户→批次→业务组→明细固定锁序配合版本校验，抵扣、反核销与转入撤销在同一账户上串行校验。

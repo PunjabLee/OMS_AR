@@ -24,6 +24,7 @@ import java.util.stream.Collectors;
 @Service @RequiredArgsConstructor
 public class SettlementServiceImpl implements SettlementService {
  private final SettlementDao dao;
+ private final BalanceSettlementService balanceSettlements;
  private final AllocationService allocator;
  private final FinanceJournalService journal;
  private final FinanceValues values;
@@ -63,7 +64,9 @@ public class SettlementServiceImpl implements SettlementService {
  }
  @Override @Transactional(rollbackFor=Exception.class)
  public Long reverse(SettlementReverseRequest request){
-  validate(request);
+  validate(request);CurrentUser.require(request.legalEntityId(),"ar:reverse");
+  var candidate=dao.settlement(request.settlementId(),request.legalEntityId(),false);
+  if(candidate!=null && "BALANCE".equals(candidate.getSettlementType()))return balanceSettlements.reverse(request);
   var ticket=journal.begin(new JournalBeginRequest(request.legalEntityId(),"ar:reverse","SETTLEMENT_REVERSE",request.requestKey(),values.json(request)));
   if(ticket.resultReference()!=null)return ticket.resultReference();
   var settlement=dao.settlement(request.settlementId(),request.legalEntityId(),true);

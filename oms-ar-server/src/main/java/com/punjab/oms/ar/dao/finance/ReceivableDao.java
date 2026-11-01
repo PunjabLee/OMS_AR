@@ -5,6 +5,9 @@ public interface ReceivableDao {
  ArOperation reserve(ArOperation operation);
  boolean complete(ArOperation operation);
  ArGroup group(Long id);
+ ArLine line(Long id, boolean lock);
+ ArAdjustmentLink adjustmentLink(Long lineId);
+ boolean createAdjustmentLink(ArAdjustmentLink value);
  boolean createDocument(ArDocument value);
  boolean createGroup(ArGroup value);
  boolean createLine(ArLine value);

@@ -17,5 +17,5 @@ public class SettlementDaoImpl extends CrudRepository<ArSettlementMapper,ArSettl
  public boolean allocate(ArSettlementAllocation value){return allocations.insert(value)==1;}
  public ArSettlement settlement(Long id,Long entity,boolean lock){var q=new LambdaQueryWrapper<ArSettlement>().eq(ArSettlement::getId,id).eq(ArSettlement::getLegalEntityId,entity).eq(ArSettlement::getDeleteStatus,false);if(lock)q.last("FOR UPDATE");return baseMapper.selectOne(q);}
  public List<ArSettlementAllocation> allocations(Long id){return allocations.selectList(new LambdaQueryWrapper<ArSettlementAllocation>().eq(ArSettlementAllocation::getSettlementId,id).eq(ArSettlementAllocation::getDeleteStatus,false).orderByAsc(ArSettlementAllocation::getSequenceNo));}
- public Long postedEvent(Long id){var event=events.selectOne(new LambdaQueryWrapper<ArEvent>().eq(ArEvent::getEventType,"RECEIPT_SETTLED").eq(ArEvent::getTriggerType,"SETTLEMENT").eq(ArEvent::getTriggerId,id.toString()).eq(ArEvent::getDeleteStatus,false));return event==null?null:event.getId();}
+ public Long postedEvent(Long id){var event=events.selectOne(new LambdaQueryWrapper<ArEvent>().in(ArEvent::getEventType,List.of("RECEIPT_SETTLED","OFFSET_SETTLED")).eq(ArEvent::getTriggerType,"SETTLEMENT").eq(ArEvent::getTriggerId,id.toString()).eq(ArEvent::getDeleteStatus,false));return event==null?null:event.getId();}
 }

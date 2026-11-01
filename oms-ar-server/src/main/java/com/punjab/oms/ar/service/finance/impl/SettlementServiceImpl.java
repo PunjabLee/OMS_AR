@@ -69,25 +69,31 @@ public class SettlementServiceImpl implements SettlementService {
   var settlement=dao.settlement(request.settlementId(),request.legalEntityId(),true);
   if(settlement==null)throw new ServiceException("核销单不存在或不可访问");
   if("REVERSED".equals(settlement.getStatus())){journal.complete(ticket,settlement.getId());return settlement.getId();}
-  if(!"RECEIPT".equals(settlement.getSettlementType()))throw new ServiceException("该核销类型尚未支持反核销");
-  var receipt=dao.receipt(settlement.getReceiptId(),request.legalEntityId(),true);
-  if(receipt==null)throw new ServiceException("原收款不可访问");
+  if(!Set.of("RECEIPT","OFFSET").contains(settlement.getSettlementType()))throw new ServiceException("该核销类型尚未支持反核销");
+  var receipt=settlement.getReceiptId()==null?null:dao.receipt(settlement.getReceiptId(),request.legalEntityId(),true);
+  if("RECEIPT".equals(settlement.getSettlementType()) && receipt==null)throw new ServiceException("原收款不可访问");
   var allocations=dao.allocations(settlement.getId());
   if(allocations.isEmpty())throw new ServiceException("原核销分配记录缺失");
-  var ids=allocations.stream().map(ArSettlementAllocation::getPositiveLineId).distinct().sorted().toList();
+  var ids=allocations.stream().flatMap(x->java.util.stream.Stream.of(x.getPositiveLineId(),x.getNegativeLineId())).filter(Objects::nonNull).distinct().sorted().toList();
   var references=dao.linesByIds(ids,false);
   if(references.size()!=ids.size())throw new ServiceException("原应收明细缺失");
   var groupIds=references.stream().map(ArLine::getGroupId).distinct().sorted().toList();
-  checkGroups(dao.groups(groupIds,request.legalEntityId(),true),groupIds,receipt);
+  var groups=dao.groups(groupIds,request.legalEntityId(),true);
+  if(groups.size()!=groupIds.size() || groups.stream().anyMatch(g->!settlement.getCustomerId().equals(g.getCustomerId()) || !settlement.getCurrency().equals(g.getCurrency())))throw new ServiceException("原核销业务组范围不一致");
   var locked=dao.linesByIds(ids,true).stream().collect(Collectors.toMap(ArLine::getId,Function.identity()));
   var changes=new ArrayList<JournalEventRequest.Change>();BigDecimal total=BigDecimal.ZERO;
   for(var allocation:allocations){
    var line=locked.get(allocation.getPositiveLineId());
    if(line==null || !"ACTIVE".equals(line.getStatus()))throw new ServiceException("原应收明细不可反核销");
-   changes.add(moveLine(line,allocation.getAmount().negate(),ticket.actor()));total=total.add(allocation.getAmount());
+   changes.add(moveLine(line,allocation.getAmount().negate(),ticket.actor()));
+   if("OFFSET".equals(settlement.getSettlementType())){
+    if(allocation.getNegativeLineId()==null)throw new ServiceException("原抵销负数明细缺失");
+    changes.add(moveLine(locked.get(allocation.getNegativeLineId()),allocation.getAmount(),ticket.actor()));
+   }
+   total=total.add(allocation.getAmount());
   }
   if(total.compareTo(settlement.getAmount())!=0)throw new ServiceException("原核销分配金额不一致");
-  changes.add(moveReceipt(receipt,total.negate(),ticket.actor()));
+  if(receipt!=null)changes.add(moveReceipt(receipt,total.negate(),ticket.actor()));
   String before=values.json(settlement);long version=settlement.getVersion();settlement.setStatus("REVERSED");settlement.setVersion(version+1);touch(settlement,ticket.actor());check(dao.update(settlement,version));
   changes.add(new JournalEventRequest.Change("SETTLEMENT",settlement.getId(),before,values.json(Map.of("status","REVERSED")),values.json(settlement),version,settlement.getVersion()));
   Long originalEvent=dao.postedEvent(settlement.getId());if(originalEvent==null)throw new ServiceException("原核销事件缺失");
@@ -114,7 +120,7 @@ public class SettlementServiceImpl implements SettlementService {
   if(line==null || !"ACTIVE".equals(line.getStatus()))throw new ServiceException("应收明细不可核销");
   String before=values.json(line);long version=line.getVersion();
   var settled=line.getSettledAmount().add(amount);var open=line.getOpenAmount().subtract(amount);
-  if(settled.signum()<0 || open.signum()<0)throw new ServiceException("应收余额不足或反核销金额不一致");
+  if((line.getReceivableAmount().signum()>0 && (settled.signum()<0 || open.signum()<0)) || (line.getReceivableAmount().signum()<0 && (settled.signum()>0 || open.signum()>0)))throw new ServiceException("应收余额不足或反核销金额不一致");
   line.setSettledAmount(settled);line.setOpenAmount(open);line.setVersion(version+1);touch(line,actor);check(dao.updateLine(line,version));
   return new JournalEventRequest.Change("LINE",line.getId(),before,values.json(Map.of("settledAmount",amount,"openAmount",amount.negate())),values.json(line),version,line.getVersion());
  }

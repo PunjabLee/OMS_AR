@@ -40,14 +40,29 @@ public class ReceivableServiceImpl implements ReceivableService {
   if(!locked.getPayloadHash().equals(operation.getPayloadHash()))throw new ServiceException("同一请求键的内容不一致");
   if(locked.getResultReference()!=null)return locked.getResultReference();
 
+  Map<Long,ArLine> originals=new HashMap<>();
+  for(var input:request.lines())if(input.originalLineId()!=null){
+   if(input.amount().signum()>=0)throw new ServiceException("只有负数应收可指定原应收行");
+   ArLine original=dao.line(input.originalLineId(),false);
+   if(original==null)throw new ServiceException("原应收行不存在");
+   originals.put(original.getId(),original);
+  }
   // 既有组统一按ID加锁，避免不同请求以相反顺序锁定多组。
   Map<Long,ArGroup> existing=new HashMap<>();
-  request.lines().stream().map(ReceivableCreateRequest.Line::groupId).filter(Objects::nonNull).distinct().sorted().forEach(id->{
+  java.util.stream.Stream.concat(request.lines().stream().map(ReceivableCreateRequest.Line::groupId),originals.values().stream().map(ArLine::getGroupId)).filter(Objects::nonNull).distinct().sorted().forEach(id->{
    ArGroup group=dao.group(id);
    if(group==null || !request.customerId().equals(group.getCustomerId()) || !request.legalEntityId().equals(group.getLegalEntityId()) || !request.currency().equals(group.getCurrency()))
     throw new ServiceException("业务组不存在或结算范围不一致");
    existing.put(id,group);
   });
+  for(var input:request.lines())if(input.originalLineId()!=null){
+   var original=dao.line(input.originalLineId(),true);
+   if(original==null || !"ACTIVE".equals(original.getStatus()) || original.getReceivableAmount().signum()<=0
+     || !request.customerId().equals(original.getCustomerId()) || !request.legalEntityId().equals(original.getLegalEntityId())
+     || !request.currency().equals(original.getCurrency()) || !input.amountType().name().equals(original.getAmountType())
+     || (input.groupId()!=null && !input.groupId().equals(original.getGroupId())))throw new ServiceException("原应收行的结算范围、金额类型或业务组不一致");
+   originals.put(original.getId(),original);
+  }
   ArDocument document=audit(converter.toEntity(request),actor,now);
   document.setDocNo("AR-"+UUID.randomUUID());document.setStatus("ACTIVE");document.setVersion(0L);
   document.setGenerationMode(request.lines().stream().allMatch(line->line.source()==null)?"DIRECT":"UPSTREAM");
@@ -77,10 +92,16 @@ public class ReceivableServiceImpl implements ReceivableService {
    line.setSettledAmount(BigDecimal.ZERO);line.setTransferredAmount(BigDecimal.ZERO);line.setInvoicedAmount(BigDecimal.ZERO);
    line.setOpenAmount(input.amount());line.setStatus("ACTIVE");line.setVersion(0L);
    persist(dao.createLine(line));snapshot(event,"LINE",line,actor,now);
+   if(input.amount().signum()<0 && (input.originalLineId()!=null || input.groupId()!=null)){
+    var link=audit(new ArAdjustmentLink(),actor,now);link.setLineId(line.getId());link.setOriginalLineId(input.originalLineId());
+    link.setRelatedGroupId(input.originalLineId()!=null?originals.get(input.originalLineId()).getGroupId():input.groupId());
+    persist(dao.createAdjustmentLink(link));snapshot(event,"ADJUSTMENT_LINK",link,actor,now);
+   }
    if(input.source()!=null){
     var source=input.source();ArSource record=audit(new ArSource(),actor,now);
     record.setLineId(line.getId());record.setSourceSystem(source.system());record.setSourceType(source.type());
     record.setSourceNo(source.number());record.setSourceId(source.id());record.setSourceLineId(source.lineId());
+    record.setOriginalLineId(input.originalLineId());
     record.setSourceEventId(source.eventId());record.setSourceOutputKey(source.outputKey());
     persist(dao.createSource(record));snapshot(event,"SOURCE",record,actor,now);
    }

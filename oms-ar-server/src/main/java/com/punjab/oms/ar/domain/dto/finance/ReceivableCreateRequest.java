@@ -18,7 +18,9 @@ public record ReceivableCreateRequest(
  public record Line(@NotBlank @Size(max=64) String groupKey, @Positive Long groupId,
   @NotNull AmountType amountType, @NotNull @Digits(integer=16,fraction=8) BigDecimal amount,
   @DecimalMin("0") @Digits(integer=4,fraction=8) BigDecimal taxRate,
-  @Digits(integer=16,fraction=8) BigDecimal taxBaseAmount, @Valid Source source) {}
+  @Digits(integer=16,fraction=8) BigDecimal taxBaseAmount, @Valid Source source, @Positive Long originalLineId) {
+  public Line(String groupKey,Long groupId,AmountType amountType,BigDecimal amount,BigDecimal taxRate,BigDecimal taxBaseAmount,Source source){this(groupKey,groupId,amountType,amount,taxRate,taxBaseAmount,source,null);}
+ }
  /** 来源行可空，事件和输出键不可空。 @author Punjab */
  public record Source(@NotBlank @Size(max=64) String system, @NotBlank @Size(max=64) String type,
   @NotBlank @Size(max=128) String number, @NotBlank @Size(max=128) String id,

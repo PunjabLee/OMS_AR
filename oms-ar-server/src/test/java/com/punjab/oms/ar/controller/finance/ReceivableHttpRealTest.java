@@ -32,7 +32,7 @@ class ReceivableHttpRealTest {
  @Autowired ObjectMapper json;
  @Test @DisplayName("真实HTTP鉴权、创建、重放及详情完整闭环") void createReplayRead() throws Exception {
   assertThat(jdbc.queryForObject("SELECT DATABASE()",String.class)).isEqualTo("oms_ar_test");
-  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql","V003__ar_receipt.sql","V004__ar_settlement.sql"))for(String sql:Files.readString(Path.of("../scratch/dbddl/"+name)).split(";"))if(!sql.isBlank())jdbc.execute(sql);
+  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql","V003__ar_receipt.sql","V004__ar_settlement.sql","V005__ar_adjustment_link.sql"))for(String sql:Files.readString(Path.of("../scratch/dbddl/"+name)).split(";"))if(!sql.isBlank())jdbc.execute(sql);
   String root="http://127.0.0.1:"+port+"/api/finance/receivables";
   String body="{\"requestKey\":\""+UUID.randomUUID()+"\",\"customerId\":1,\"legalEntityId\":1,\"currency\":\"CNY\",\"businessType\":\"SERVICE\",\"businessDate\":\"2026-10-31\",\"reason\":\"http test\",\"lines\":[{\"groupKey\":\"A\",\"amountType\":\"PRINCIPAL\",\"amount\":100}]}";
   try(var client=HttpClient.newHttpClient()){
@@ -59,7 +59,22 @@ class ReceivableHttpRealTest {
    var reverseBody=java.util.Map.of("requestKey",UUID.randomUUID().toString(),"legalEntityId",1,"settlementId",settlementId,"reason","http reverse");
    var reversal=client.send(HttpRequest.newBuilder(URI.create(settlementRoot+"/reverse")).header("Authorization","Bearer "+TOKEN).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(reverseBody))).build(),HttpResponse.BodyHandlers.ofString());assertThat(reversal.statusCode()).isEqualTo(200);
    assertThat(jdbc.queryForObject("SELECT allocated_amount FROM oms_ar_receipt WHERE id=?",java.math.BigDecimal.class,receiptId)).isEqualByComparingTo("0");
+   var creditBody=(com.fasterxml.jackson.databind.node.ObjectNode)json.readTree(body);creditBody.put("requestKey",UUID.randomUUID().toString());
+   ((com.fasterxml.jackson.databind.node.ObjectNode)creditBody.at("/lines/0")).put("amount",-10);
+   long creditDoc=post(client,root+"/create",creditBody).get("data").asLong();
+   long creditLine=jdbc.queryForObject("SELECT id FROM oms_ar_line WHERE document_id=?",Long.class,creditDoc);
+   var offsetRequest=Map.of("legalEntityId",1,"negativeLineId",creditLine,"amount",10,"groupIds",List.of(groupId),"continueOtherTargets",false,"strategy","GROUP_TAX_FIRST");
+   var offsetPreview=post(client,"http://127.0.0.1:"+port+"/api/finance/offsets/preview",offsetRequest);
+   assertThat(offsetPreview.at("/data/usedAmount").decimalValue()).isEqualByComparingTo("10");
+   long offsetId=post(client,"http://127.0.0.1:"+port+"/api/finance/offsets/confirm",Map.of("requestKey",UUID.randomUUID().toString(),"preview",offsetRequest,"expectedFingerprint",offsetPreview.at("/data/fingerprint").asText(),"reason","http offset")).get("data").asLong();
+   assertThat(offsetId).isPositive();
+   post(client,settlementRoot+"/reverse",Map.of("requestKey",UUID.randomUUID().toString(),"legalEntityId",1,"settlementId",offsetId,"reason","http offset reverse"));
+   assertThat(jdbc.queryForObject("SELECT open_amount FROM oms_ar_line WHERE id=?",java.math.BigDecimal.class,creditLine)).isEqualByComparingTo("-10");
    assertThat(detail.statusCode()).isEqualTo(200);assertThat(json.readTree(detail.body()).at("/data/principal/openAmount").decimalValue()).isEqualByComparingTo("100");
   }
+ }
+ private com.fasterxml.jackson.databind.JsonNode post(HttpClient client,String url,Object body)throws Exception{
+  var response=client.send(HttpRequest.newBuilder(URI.create(url)).header("Authorization","Bearer "+TOKEN).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body))).build(),HttpResponse.BodyHandlers.ofString());
+  assertThat(response.statusCode()).isEqualTo(200);return json.readTree(response.body());
  }
 }

@@ -36,4 +36,14 @@ POST `/api/finance/settlements/confirm`：`requestKey`、原`preview`请求对�
 
 POST `/api/finance/settlements/reverse`：`requestKey`、`legalEntityId`、`settlementId`、`reason`，要求`ar:reverse`。整单按原分配恢复，保留原核销单和分配关系并新增逆向事件。重复反核销不会重复恢复余额。
 
-当前上述入口只支持收款核销；正负抵销与信用余额抵扣将在各自任务中接入，不提前开放预留类型。
+反核销入口支持收款核销与正负应收抵销；信用余额抵扣将在后续任务中接入。
+
+## 正负应收抵销
+
+创建负数应收行可传 `originalLineId`，必须关联同主体、客户、币种、金额类型的有效正数行。指定既有 `groupId` 或原行时生成不可变调整关联；指定两者时必须为同组。关联单独存储，即使没有来源单据也不会丢失。原行已结清仍可关联；正数应收不能指定原行。
+
+POST `/api/finance/offsets/preview`：`legalEntityId`、`negativeLineId`、正数 `amount`、有序 `groupIds`、`continueOtherTargets`、`strategy=GROUP_TAX_FIRST`。要求 `ar:settle`。有关联原行默认仅抵原行；仅有关联组则抵组内同类型。用户确认 `continueOtherTargets=true` 后，先原行、再关联组及所选组的其他同类型行。未确认时额外目标组会被拒绝。独立负数按所选组顺序、每组先税后价，可跨类型抵销。
+
+预览返回 `linked`、`originalLineId`、负数行版本、逐行分配、`usedAmount`、请求金额未分配部分 `unallocatedAmount`、抵销后的负数余额绝对值 `remainingCredit`、`fingerprint`。未分配部分保留待核销，不自动进入客户账户。
+
+POST `/api/finance/offsets/confirm`：`requestKey`、原 `preview` 请求、`expectedFingerprint`、`reason`。确认后生成 OFFSET 核销单；正负应收、分配记录及前后流水同事务提交。重复请求返回原核销单；余额或目标成员变化需重新预览。撤销调用通用 `/api/finance/settlements/reverse`，恢复原分配而不按当前规则重算。

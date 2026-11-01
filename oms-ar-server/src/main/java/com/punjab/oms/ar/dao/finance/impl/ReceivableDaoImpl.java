@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 @Repository @RequiredArgsConstructor
 public class ReceivableDaoImpl extends CrudRepository<ArDocumentMapper,ArDocument> implements ReceivableDao {
  private final ArGroupMapper groups;
+ private final ArAdjustmentLinkMapper links;
  private final ArLineMapper lines;
  private final ArSourceMapper sources;
  private final ArOperationMapper operations;
@@ -24,6 +25,9 @@ public class ReceivableDaoImpl extends CrudRepository<ArDocumentMapper,ArDocumen
  }
  public boolean complete(ArOperation value){return operations.updateById(value)==1;}
  public ArGroup group(Long id){return groups.selectOne(new LambdaQueryWrapper<ArGroup>().eq(ArGroup::getId,id).eq(ArGroup::getDeleteStatus,false).last("FOR UPDATE"));}
+ public ArLine line(Long id,boolean lock){var q=new LambdaQueryWrapper<ArLine>().eq(ArLine::getId,id).eq(ArLine::getDeleteStatus,false);if(lock)q.last("FOR UPDATE");return lines.selectOne(q);}
+ public ArAdjustmentLink adjustmentLink(Long lineId){return links.selectOne(new LambdaQueryWrapper<ArAdjustmentLink>().eq(ArAdjustmentLink::getLineId,lineId).eq(ArAdjustmentLink::getDeleteStatus,false));}
+ public boolean createAdjustmentLink(ArAdjustmentLink value){return links.insert(value)==1;}
  public boolean createDocument(ArDocument value){return baseMapper.insert(value)==1;}
  public boolean createGroup(ArGroup value){return groups.insert(value)==1;}
  public boolean createLine(ArLine value){return lines.insert(value)==1;}

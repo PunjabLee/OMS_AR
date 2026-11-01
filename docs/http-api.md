@@ -27,3 +27,13 @@ Authorization请求头格式：`Bearer <token>`。身份与权限来自服务端
 ## 收款
 
 POST `/api/finance/receipts/create`登记收款，要求 `ar:receipt:create`；GET `/api/finance/receipts/detail?id=...&legalEntityId=...`查询原额、已分配、可用余额及版本，要求 `ar:read`。登记请求包含requestKey/customerId/legalEntityId/currency/amount/receivedDate/sourceSystem/sourceId/sourceNo，来源在主体内唯一。登记行为仅代表授权收款系统确认的实际收款，不调用银行，不伪造银行确认。
+
+## 收款核销
+
+POST `/api/finance/settlements/preview`：`legalEntityId`、`receiptId`、`amount`、有序`groupIds`、`strategy=GROUP_TAX_FIRST`。明确选择组内全部有效正数应收（可能跨单），响应列出实际分配行、版本、实际使用金额、未分配金额和fingerprint。预览不占款。
+
+POST `/api/finance/settlements/confirm`：`requestKey`、原`preview`请求对象、`expectedFingerprint`、`reason`。预览与确认要求`ar:settle`；补税、余额变化或版本变化会拒绝旧预览，必须重新确认。超出目标应收的金额保留为收款可用余额，不转信用账户。
+
+POST `/api/finance/settlements/reverse`：`requestKey`、`legalEntityId`、`settlementId`、`reason`，要求`ar:reverse`。整单按原分配恢复，保留原核销单和分配关系并新增逆向事件。重复反核销不会重复恢复余额。
+
+当前上述入口只支持收款核销；正负抵销与信用余额抵扣将在各自任务中接入，不提前开放预留类型。

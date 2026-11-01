@@ -25,14 +25,14 @@ class ReceivableHttpRealTest {
   p.add("spring.datasource.username",()->"oms_ar");p.add("spring.datasource.password",()->System.getenv("AR_TEST_PASSWORD"));
   p.add("ar.auth.clients[0].token",()->TOKEN);p.add("ar.auth.clients[0].username",()->"http-integration");
   p.add("ar.auth.clients[0].legal-entities[0]",()->"1");
-  p.add("ar.auth.clients[0].permissions[0]",()->"ar:create");p.add("ar.auth.clients[0].permissions[1]",()->"ar:read");p.add("ar.auth.clients[0].permissions[2]",()->"ar:receipt:create");
+  p.add("ar.auth.clients[0].permissions[0]",()->"ar:create");p.add("ar.auth.clients[0].permissions[1]",()->"ar:read");p.add("ar.auth.clients[0].permissions[2]",()->"ar:receipt:create");p.add("ar.auth.clients[0].permissions[3]",()->"ar:settle");p.add("ar.auth.clients[0].permissions[4]",()->"ar:reverse");
  }
  @LocalServerPort int port;
  @Autowired JdbcTemplate jdbc;
  @Autowired ObjectMapper json;
  @Test @DisplayName("真实HTTP鉴权、创建、重放及详情完整闭环") void createReplayRead() throws Exception {
   assertThat(jdbc.queryForObject("SELECT DATABASE()",String.class)).isEqualTo("oms_ar_test");
-  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql","V003__ar_receipt.sql"))for(String sql:Files.readString(Path.of("../scratch/dbddl/"+name)).split(";"))if(!sql.isBlank())jdbc.execute(sql);
+  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql","V003__ar_receipt.sql","V004__ar_settlement.sql"))for(String sql:Files.readString(Path.of("../scratch/dbddl/"+name)).split(";"))if(!sql.isBlank())jdbc.execute(sql);
   String root="http://127.0.0.1:"+port+"/api/finance/receivables";
   String body="{\"requestKey\":\""+UUID.randomUUID()+"\",\"customerId\":1,\"legalEntityId\":1,\"currency\":\"CNY\",\"businessType\":\"SERVICE\",\"businessDate\":\"2026-10-31\",\"reason\":\"http test\",\"lines\":[{\"groupKey\":\"A\",\"amountType\":\"PRINCIPAL\",\"amount\":100}]}";
   try(var client=HttpClient.newHttpClient()){
@@ -48,6 +48,17 @@ class ReceivableHttpRealTest {
    assertThat(receipt.statusCode()).isEqualTo(200);long receiptId=json.readTree(receipt.body()).get("data").asLong();assertThat(receiptId).isPositive();
    var balance=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/finance/receipts/detail?id="+receiptId+"&legalEntityId=1")).header("Authorization","Bearer "+TOKEN).GET().build(),HttpResponse.BodyHandlers.ofString());
    assertThat(balance.statusCode()).isEqualTo(200);assertThat(json.readTree(balance.body()).at("/data/availableAmount").decimalValue()).isEqualByComparingTo("120");
+   String settlementRoot="http://127.0.0.1:"+port+"/api/finance/settlements";
+   long groupId=json.readTree(detail.body()).at("/data/lines/0/groupId").asLong();
+   var previewBody=java.util.Map.of("legalEntityId",1,"receiptId",receiptId,"amount",20,"groupIds",java.util.List.of(groupId),"strategy","GROUP_TAX_FIRST");
+   var preview=client.send(HttpRequest.newBuilder(URI.create(settlementRoot+"/preview")).header("Authorization","Bearer "+TOKEN).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(previewBody))).build(),HttpResponse.BodyHandlers.ofString());
+   assertThat(preview.statusCode()).isEqualTo(200);String fingerprint=json.readTree(preview.body()).at("/data/fingerprint").asText();
+   var confirmBody=java.util.Map.of("requestKey",UUID.randomUUID().toString(),"preview",previewBody,"expectedFingerprint",fingerprint,"reason","http settle");
+   var confirmation=client.send(HttpRequest.newBuilder(URI.create(settlementRoot+"/confirm")).header("Authorization","Bearer "+TOKEN).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(confirmBody))).build(),HttpResponse.BodyHandlers.ofString());
+   assertThat(confirmation.statusCode()).isEqualTo(200);long settlementId=json.readTree(confirmation.body()).at("/data").asLong();assertThat(settlementId).isPositive();
+   var reverseBody=java.util.Map.of("requestKey",UUID.randomUUID().toString(),"legalEntityId",1,"settlementId",settlementId,"reason","http reverse");
+   var reversal=client.send(HttpRequest.newBuilder(URI.create(settlementRoot+"/reverse")).header("Authorization","Bearer "+TOKEN).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(reverseBody))).build(),HttpResponse.BodyHandlers.ofString());assertThat(reversal.statusCode()).isEqualTo(200);
+   assertThat(jdbc.queryForObject("SELECT allocated_amount FROM oms_ar_receipt WHERE id=?",java.math.BigDecimal.class,receiptId)).isEqualByComparingTo("0");
    assertThat(detail.statusCode()).isEqualTo(200);assertThat(json.readTree(detail.body()).at("/data/principal/openAmount").decimalValue()).isEqualByComparingTo("100");
   }
  }

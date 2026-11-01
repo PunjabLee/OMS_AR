@@ -69,3 +69,17 @@ POST `/api/finance/customer-balances/settlements/confirm`：`requestKey`、原 `
 `businessType=EXCHANGE_DIFFERENCE`的每条应收必须是PRINCIPAL，且提供`exchangeBasis`：`originalCurrency`、`originalAmount`、`oldRate`、`newRate`、`rateDirection`。原币与结算币须不同，汇率为正，原币金额符合原币精度。`SETTLEMENT_PER_ORIGINAL`表示乘汇率，`ORIGINAL_PER_SETTLEMENT`表示除汇率。旧、新折算值分别用HALF_UP舍入到结算币种精度，差额为新减旧；必须等于行amount，零差额不生成应收。折算值超出金额存储范围会拒绝。
 
 应收详情逐行返回`exchangeBasis`计算快照与`version`，来源记录补充`originalLineId`。依据与应收、来源和初始化流水同事务保存，后续核销不重算依据。其他业务类型禁止夹带汇率依据。汇率差异可开票资格仍待开票服务实现，并默认关闭；保存依据不代表可开票。
+
+## 开票额度查询（只读）
+
+POST `/api/finance/invoice-links/eligibility`：`legalEntityId`、`customerId`、`currency`、不重复的 `groupIds`（最多200），要求 `ar:read`。返回共享额度分组 `buckets`、逐行归属/剩余额 `lines` 和快照指纹，不登记或占用开票金额。
+
+每组按“开票业务组＋amountType＋taxRate”计算：`remainingNetAmount = receivableNetAmount - invoicedNetAmount`，金额均保留原正负方向；`blueAvailableAmount=max(remainingNetAmount,0)`。关联负数归adjustment_link.related_group_id，其他明细归物理业务组。实际收款、抵销去向、转入余额及未核销余额不参与此公式。NULL税率与0税率不同。
+
+逐行`remainingAmount`是该行自身剩余额，不能把多行可用额相加后越过共享分组额度；后续登记必须同时校验行额度和分组额度。负的分组净余额不代表可直接红字开票，红字仍需原发票及原分配的剩余额约束。
+
+`invoiceSupported=false`说明该行目前不能贡献开票额度，原因见`blockedReason`。汇率差异默认`EXCHANGE_DIFFERENCE_DISABLED`；仅显式设置 `AR_INVOICE_EXCHANGE_DIFFERENCE_ENABLED=true` 才开启，并仍要求存在汇率依据，否则`EXCHANGE_BASIS_MISSING`。该配置不改变应收余额和核销资格。
+
+此接口只提供查询；预览中的发票金额/税率校验、登记事务、红字依赖及撤销仍在后续开票任务实现，不能以查询通过替代写入前校验。
+
+指定originalLineId的负数调整必须保留原行税率（数值相等即可，NULL与零不同）。税率变化应以原税率负数冲回，再由新税率应收承载。历史关联若价税类型或税率不一致，开票额度查询拒绝计算并要求先更正调整，不静默改写税率或返回未减少的旧税率额度。

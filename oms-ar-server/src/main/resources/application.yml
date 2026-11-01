@@ -11,6 +11,8 @@ server:
   port: ${SERVER_PORT:8080}
 
 ar:
+  invoice:
+    exchange-difference-enabled: ${AR_INVOICE_EXCHANGE_DIFFERENCE_ENABLED:false}
   auth:
     clients:
       - token: ${AR_API_TOKEN:}

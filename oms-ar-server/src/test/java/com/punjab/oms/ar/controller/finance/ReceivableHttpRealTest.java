@@ -85,6 +85,10 @@ class ReceivableHttpRealTest {
    var fxLine=(com.fasterxml.jackson.databind.node.ObjectNode)fxBody.at("/lines/0");fxLine.put("amount",20);fxLine.set("exchangeBasis",json.valueToTree(Map.of("originalCurrency","USD","originalAmount",100,"oldRate",new java.math.BigDecimal("7.1"),"newRate",new java.math.BigDecimal("7.3"),"rateDirection","SETTLEMENT_PER_ORIGINAL")));
    long fxDoc=post(client,root+"/create",fxBody).get("data").asLong();
    var fxDetail=client.send(HttpRequest.newBuilder(URI.create(root+"/detail?id="+fxDoc+"&legalEntityId=1")).header("Authorization","Bearer "+TOKEN).GET().build(),HttpResponse.BodyHandlers.ofString());assertThat(fxDetail.statusCode()).isEqualTo(200);assertThat(json.readTree(fxDetail.body()).at("/data/lines/0/exchangeBasis/confirmedDifference").decimalValue()).isEqualByComparingTo("20");assertThat(json.readTree(fxDetail.body()).at("/data/lines/0/version").asLong(-1)).isZero();
+   var quota=post(client,"http://127.0.0.1:"+port+"/api/finance/invoice-links/eligibility",Map.of("legalEntityId",1,"customerId",1,"currency","CNY","groupIds",List.of(groupId)));
+   assertThat(quota.at("/data/buckets/0/blueAvailableAmount").decimalValue()).isEqualByComparingTo("100");assertThat(quota.at("/data/fingerprint").asText()).hasSize(64);
+   long fxGroup=jdbc.queryForObject("SELECT group_id FROM oms_ar_line WHERE document_id=?",Long.class,fxDoc);
+   var fxQuota=post(client,"http://127.0.0.1:"+port+"/api/finance/invoice-links/eligibility",Map.of("legalEntityId",1,"customerId",1,"currency","CNY","groupIds",List.of(fxGroup)));assertThat(fxQuota.at("/data/buckets").size()).isZero();assertThat(fxQuota.at("/data/lines/0/blockedReason").asText()).isEqualTo("EXCHANGE_DIFFERENCE_DISABLED");
    assertThat(detail.statusCode()).isEqualTo(200);assertThat(json.readTree(detail.body()).at("/data/principal/openAmount").decimalValue()).isEqualByComparingTo("100");
   }
  }

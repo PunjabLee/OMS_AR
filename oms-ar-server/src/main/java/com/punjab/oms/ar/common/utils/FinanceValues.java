@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 @Component @RequiredArgsConstructor
 public class FinanceValues {
  private final ObjectMapper json;
+ public static boolean sameTaxRate(BigDecimal left,BigDecimal right){return left==null?right==null:right!=null && left.compareTo(right)==0;}
  public String json(Object value){try{return json.writeValueAsString(value);}catch(Exception e){throw new ServiceException("快照序列化失败");}}
  public void positiveMoney(String currency,BigDecimal amount){
   try{int scale=Currency.getInstance(currency).getDefaultFractionDigits();if(scale<0||scale>8||amount==null||amount.signum()<=0||amount.abs().compareTo(new BigDecimal("10000000000000000"))>=0)throw new IllegalArgumentException();amount.setScale(scale,RoundingMode.UNNECESSARY);}

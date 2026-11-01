@@ -62,6 +62,7 @@ public class ReceivableServiceImpl implements ReceivableService {
      || !request.customerId().equals(original.getCustomerId()) || !request.legalEntityId().equals(original.getLegalEntityId())
      || !request.currency().equals(original.getCurrency()) || !input.amountType().name().equals(original.getAmountType())
      || (input.groupId()!=null && !input.groupId().equals(original.getGroupId())))throw new ServiceException("原应收行的结算范围、金额类型或业务组不一致");
+   if(!com.punjab.oms.ar.common.utils.FinanceValues.sameTaxRate(input.taxRate(),original.getTaxRate()))throw new ServiceException("指定原应收行的调整须保留原税率，新税率请另行生成应收");
    originals.put(original.getId(),original);
   }
   ArDocument document=audit(converter.toEntity(request),actor,now);

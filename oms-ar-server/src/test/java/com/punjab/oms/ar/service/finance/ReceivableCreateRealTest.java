@@ -32,7 +32,7 @@ class ReceivableCreateRealTest {
  @Autowired JdbcTemplate jdbc;
  @BeforeEach void setup() throws Exception {
   assertThat(jdbc.queryForObject("SELECT DATABASE()",String.class)).isEqualTo("oms_ar_test");
-  for(String file:List.of("V001__ar_core.sql","V002__ar_audit.sql","V005__ar_adjustment_link.sql","V009__ar_exchange_basis.sql"))
+  for(String file:List.of("V001__ar_core.sql","V002__ar_audit.sql","V005__ar_adjustment_link.sql","V009__ar_exchange_basis.sql","V010__ar_source_guard.sql"))
    for(String sql:Files.readString(Path.of("../scratch/dbddl/"+file)).split(";")) if(!sql.isBlank())jdbc.execute(sql);
   CurrentUser.set(new CurrentUser.Identity("integration",Set.of(1L),Set.of("ar:create","ar:read")));
  }

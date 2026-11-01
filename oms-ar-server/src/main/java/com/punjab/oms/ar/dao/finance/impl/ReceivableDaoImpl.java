@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 /** 仅管理应收聚合对应的数据对象。 @author Punjab */
 @Repository @RequiredArgsConstructor
 public class ReceivableDaoImpl extends CrudRepository<ArDocumentMapper,ArDocument> implements ReceivableDao {
+ private final ArSourceGuardMapper sourceGuards;
  private final ArGroupMapper groups;
  private final ArAdjustmentLinkMapper links;
  private final ArLineMapper lines;
@@ -17,6 +18,8 @@ public class ReceivableDaoImpl extends CrudRepository<ArDocumentMapper,ArDocumen
  private final ArOperationMapper operations;
  private final ArEventMapper events;
  private final ArChangeMapper changes;
+ public boolean initializeSourceGuard(ArSourceGuard value){return sourceGuards.initialize(value)==1;}
+ public ArSourceGuard lockSourceGuard(Long scope,String key){return sourceGuards.selectOne(new LambdaQueryWrapper<ArSourceGuard>().eq(ArSourceGuard::getLegalEntityId,scope).eq(ArSourceGuard::getSourceKey,key).last("FOR UPDATE"));}
  public ArOperation reserve(ArOperation value){
   operations.reserve(value);
   return operations.selectOne(new LambdaQueryWrapper<ArOperation>()

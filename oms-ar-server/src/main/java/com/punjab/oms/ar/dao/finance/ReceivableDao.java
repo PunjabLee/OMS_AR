@@ -2,6 +2,8 @@ package com.punjab.oms.ar.dao.finance;
 import com.punjab.oms.ar.domain.entity.finance.*;
 /** 应收聚合数据访问，不承载业务事务。 @author Punjab */
 public interface ReceivableDao {
+ boolean initializeSourceGuard(ArSourceGuard value);
+ ArSourceGuard lockSourceGuard(Long legalEntityId,String sourceKey);
  ArOperation reserve(ArOperation operation);
  boolean complete(ArOperation operation);
  ArGroup group(Long id);

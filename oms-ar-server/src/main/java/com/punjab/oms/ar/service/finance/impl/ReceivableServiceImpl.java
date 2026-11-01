@@ -41,6 +41,17 @@ public class ReceivableServiceImpl implements ReceivableService {
   if(!locked.getPayloadHash().equals(operation.getPayloadHash()))throw new ServiceException("同一请求键的内容不一致");
   if(locked.getResultReference()!=null)return locked.getResultReference();
 
+  // 所有来源锁先于业务组；多输出共享同一稳定来源锁。
+  Map<String,ReceivableCreateRequest.Source> sourceKeys=new TreeMap<>();
+  for(var input:request.lines())if(input.source()!=null){var source=input.source();sourceKeys.put(hash(serialize(Arrays.asList(source.system(),source.type(),source.id(),source.lineId()))),source);}
+  List<ArSourceGuard> initializedGuards=new ArrayList<>();
+  for(var entry:sourceKeys.entrySet()){
+   var source=entry.getValue();var guard=audit(new ArSourceGuard(),actor,now);guard.setLegalEntityId(request.legalEntityId());guard.setSourceKey(entry.getKey());guard.setSourceSystem(source.system());guard.setSourceType(source.type());guard.setSourceId(source.id());guard.setSourceLineId(source.lineId());guard.setBlocked(false);guard.setVersion(0L);
+   boolean initialized=dao.initializeSourceGuard(guard);var current=dao.lockSourceGuard(request.legalEntityId(),entry.getKey());
+   if(current==null || !source.system().equals(current.getSourceSystem()) || !source.type().equals(current.getSourceType()) || !source.id().equals(current.getSourceId()) || !Objects.equals(source.lineId(),current.getSourceLineId()))throw new ServiceException("来源身份锁不一致");
+   if(Boolean.TRUE.equals(current.getBlocked()) || Boolean.TRUE.equals(current.getDeleteStatus()))throw new ServiceException("来源已作废，禁止自动重新生成应收");
+   if(initialized)initializedGuards.add(current);
+  }
   Map<Long,ArLine> originals=new HashMap<>();
   for(var input:request.lines())if(input.originalLineId()!=null){
    if(input.amount().signum()>=0)throw new ServiceException("只有负数应收可指定原应收行");
@@ -74,6 +85,7 @@ public class ReceivableServiceImpl implements ReceivableService {
   event.setReason(request.reason());event.setCorrelationId("create:"+locked.getId());event.setSchemaVersion(1);
   event.setTriggerType(document.getGenerationMode());event.setTriggerId(request.requestKey());persist(dao.createEvent(event));
   snapshot(event,"DOCUMENT",document,actor,now);
+  for(var guard:initializedGuards)snapshot(event,"SOURCE_GUARD",guard,actor,now);
   Map<String,ArGroup> newGroups=new HashMap<>();
   int sequence=0;
   for(var input:request.lines()){

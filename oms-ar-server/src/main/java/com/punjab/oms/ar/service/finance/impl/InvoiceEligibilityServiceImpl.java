@@ -9,8 +9,11 @@ public class InvoiceEligibilityServiceImpl implements InvoiceEligibilityService 
  /** 税率标准化后的共享额度键；NULL与零税率不同。 @author Punjab */
  private record BucketKey(Long groupId,String amountType,BigDecimal taxRate){}
  @Override @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
- public InvoiceEligibilityResponse query(InvoiceEligibilityQuery query){
-  if(query==null || !validator.validate(query).isEmpty() || new HashSet<>(query.groupIds()).size()!=query.groupIds().size())throw new ServiceException("开票额度查询范围无效");CurrentUser.require(query.legalEntityId(),"ar:read");
+ public InvoiceEligibilityResponse query(InvoiceEligibilityQuery query){return calculate(query,"ar:read");}
+ @Override @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
+ public InvoiceEligibilityResponse forRegistration(InvoiceEligibilityQuery query){return calculate(query,"ar:invoice:write");}
+ private InvoiceEligibilityResponse calculate(InvoiceEligibilityQuery query,String permission){
+  if(query==null || !validator.validate(query).isEmpty() || new HashSet<>(query.groupIds()).size()!=query.groupIds().size())throw new ServiceException("开票额度查询范围无效");CurrentUser.require(query.legalEntityId(),permission);
   var bo=converter.toQueryBO(query);if(dao.groups(bo).size()!=query.groupIds().size())throw new ServiceException("业务组不存在或客户、主体、币种不一致");
   boolean exchangeEnabled=properties.isExchangeDifferenceEnabled();var rows=dao.lines(bo);Map<BucketKey,BigDecimal[]> totals=new LinkedHashMap<>();var lines=new ArrayList<InvoiceEligibilityResponse.Line>();
   for(var row:rows){

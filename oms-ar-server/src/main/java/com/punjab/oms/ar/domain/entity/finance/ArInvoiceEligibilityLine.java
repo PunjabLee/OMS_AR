@@ -1,7 +1,8 @@
 package com.punjab.oms.ar.domain.entity.finance;
 /** 开票额度查询的只读联表投影，不用于写表。 @author Punjab */
 public class ArInvoiceEligibilityLine extends ArLine {
- private Long invoiceGroupId,exchangeBasisId,adjustmentOriginalLineId;private String businessType,originalAmountType;private java.math.BigDecimal originalTaxRate;
+ private Long invoiceGroupId,exchangeBasisId,adjustmentOriginalLineId,relatedGroupId;
+ public Long getRelatedGroupId(){return relatedGroupId;}public void setRelatedGroupId(Long v){relatedGroupId=v;}private String businessType,originalAmountType;private java.math.BigDecimal originalTaxRate;
  public Long getAdjustmentOriginalLineId(){return adjustmentOriginalLineId;}public void setAdjustmentOriginalLineId(Long v){adjustmentOriginalLineId=v;}
  public String getOriginalAmountType(){return originalAmountType;}public void setOriginalAmountType(String v){originalAmountType=v;}
  public java.math.BigDecimal getOriginalTaxRate(){return originalTaxRate;}public void setOriginalTaxRate(java.math.BigDecimal v){originalTaxRate=v;}

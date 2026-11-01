@@ -25,14 +25,14 @@ class ReceivableHttpRealTest {
   p.add("spring.datasource.username",()->"oms_ar");p.add("spring.datasource.password",()->System.getenv("AR_TEST_PASSWORD"));
   p.add("ar.auth.clients[0].token",()->TOKEN);p.add("ar.auth.clients[0].username",()->"http-integration");
   p.add("ar.auth.clients[0].legal-entities[0]",()->"1");
-  p.add("ar.auth.clients[0].permissions[0]",()->"ar:create");p.add("ar.auth.clients[0].permissions[1]",()->"ar:read");p.add("ar.auth.clients[0].permissions[2]",()->"ar:receipt:create");p.add("ar.auth.clients[0].permissions[3]",()->"ar:settle");p.add("ar.auth.clients[0].permissions[4]",()->"ar:reverse");p.add("ar.auth.clients[0].permissions[5]",()->"ar:balance:transfer");
+  p.add("ar.auth.clients[0].permissions[0]",()->"ar:create");p.add("ar.auth.clients[0].permissions[1]",()->"ar:read");p.add("ar.auth.clients[0].permissions[2]",()->"ar:receipt:create");p.add("ar.auth.clients[0].permissions[3]",()->"ar:settle");p.add("ar.auth.clients[0].permissions[4]",()->"ar:reverse");p.add("ar.auth.clients[0].permissions[5]",()->"ar:balance:transfer");p.add("ar.auth.clients[0].permissions[6]",()->"ar:invoice:write");
  }
  @LocalServerPort int port;
  @Autowired JdbcTemplate jdbc;
  @Autowired ObjectMapper json;
  @Test @DisplayName("真实HTTP鉴权、创建、重放及详情完整闭环") void createReplayRead() throws Exception {
   assertThat(jdbc.queryForObject("SELECT DATABASE()",String.class)).isEqualTo("oms_ar_test");
-  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql","V003__ar_receipt.sql","V004__ar_settlement.sql","V005__ar_adjustment_link.sql","V006__ar_customer_balance.sql","V007__ar_balance_settlement.sql","V009__ar_exchange_basis.sql"))for(String sql:Files.readString(Path.of("../scratch/dbddl/"+name)).split(";"))if(!sql.isBlank())jdbc.execute(sql);
+  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql","V003__ar_receipt.sql","V004__ar_settlement.sql","V005__ar_adjustment_link.sql","V006__ar_customer_balance.sql","V007__ar_balance_settlement.sql","V008__ar_invoice.sql","V009__ar_exchange_basis.sql"))for(String sql:Files.readString(Path.of("../scratch/dbddl/"+name)).split(";"))if(!sql.isBlank())jdbc.execute(sql);
   String root="http://127.0.0.1:"+port+"/api/finance/receivables";
   String body="{\"requestKey\":\""+UUID.randomUUID()+"\",\"customerId\":1,\"legalEntityId\":1,\"currency\":\"CNY\",\"businessType\":\"SERVICE\",\"businessDate\":\"2026-10-31\",\"reason\":\"http test\",\"lines\":[{\"groupKey\":\"A\",\"amountType\":\"PRINCIPAL\",\"amount\":100}]}";
   try(var client=HttpClient.newHttpClient()){
@@ -89,6 +89,27 @@ class ReceivableHttpRealTest {
    assertThat(quota.at("/data/buckets/0/blueAvailableAmount").decimalValue()).isEqualByComparingTo("100");assertThat(quota.at("/data/fingerprint").asText()).hasSize(64);
    long fxGroup=jdbc.queryForObject("SELECT group_id FROM oms_ar_line WHERE document_id=?",Long.class,fxDoc);
    var fxQuota=post(client,"http://127.0.0.1:"+port+"/api/finance/invoice-links/eligibility",Map.of("legalEntityId",1,"customerId",1,"currency","CNY","groupIds",List.of(fxGroup)));assertThat(fxQuota.at("/data/buckets").size()).isZero();assertThat(fxQuota.at("/data/lines/0/blockedReason").asText()).isEqualTo("EXCHANGE_DIFFERENCE_DISABLED");
+   String invoiceRoot="http://127.0.0.1:"+port+"/api/finance/invoice-links";
+   long priceLine=json.readTree(detail.body()).at("/data/lines/0/id").asLong();
+   var blueRequest=Map.of("legalEntityId",1,"customerId",1,"currency","CNY","kind","BLUE","totalAmount",100,"lines",List.of(Map.of("invoiceLineId","1","receivableLineId",priceLine,"amount",100)));
+   var bluePreview=post(client,invoiceRoot+"/preview",blueRequest);
+   var blueRegister=Map.of("requestKey",UUID.randomUUID().toString(),"sourceSystem","HTTP","sourceId",UUID.randomUUID().toString(),"invoiceNo","HTTP-BLUE","invoiceDate","2026-11-01","preview",blueRequest,"expectedFingerprint",bluePreview.at("/data/fingerprint").asText(),"reason","http blue");
+   long blueId=post(client,invoiceRoot+"/register",blueRegister).get("data").asLong();
+   assertThat(post(client,invoiceRoot+"/register",blueRegister).get("data").asLong()).isEqualTo(blueId);
+   var blueDetail=client.send(HttpRequest.newBuilder(URI.create(invoiceRoot+"/detail?id="+blueId+"&legalEntityId=1")).header("Authorization","Bearer "+TOKEN).GET().build(),HttpResponse.BodyHandlers.ofString());
+   assertThat(blueDetail.statusCode()).isEqualTo(200);var blueData=json.readTree(blueDetail.body());
+   assertThat(blueData.at("/data/allocations/0/redAvailableAmount").decimalValue()).isEqualByComparingTo("100");
+   long originalAllocation=blueData.at("/data/allocations/0/id").asLong();
+   var redRequest=Map.of("legalEntityId",1,"customerId",1,"currency","CNY","kind","RED","originalInvoiceId",blueId,"totalAmount",-10,"lines",List.of(Map.of("invoiceLineId","1","receivableLineId",creditLine,"amount",-10,"originalAllocationId",originalAllocation)));
+   var redPreview=post(client,invoiceRoot+"/preview",redRequest);
+   long redId=post(client,invoiceRoot+"/register",Map.of("requestKey",UUID.randomUUID().toString(),"sourceSystem","HTTP","sourceId",UUID.randomUUID().toString(),"invoiceNo","HTTP-RED","invoiceDate","2026-11-01","preview",redRequest,"expectedFingerprint",redPreview.at("/data/fingerprint").asText(),"reason","http red")).get("data").asLong();
+   var blueReverse=Map.of("requestKey",UUID.randomUUID().toString(),"legalEntityId",1,"invoiceId",blueId,"reason","http blue reverse");
+   var blocked=client.send(HttpRequest.newBuilder(URI.create(invoiceRoot+"/reverse")).header("Authorization","Bearer "+TOKEN).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(blueReverse))).build(),HttpResponse.BodyHandlers.ofString());
+   assertThat(blocked.statusCode()).isEqualTo(409);
+   post(client,invoiceRoot+"/reverse",Map.of("requestKey",UUID.randomUUID().toString(),"legalEntityId",1,"invoiceId",redId,"reason","http red reverse"));
+   post(client,invoiceRoot+"/reverse",blueReverse);
+   assertThat(jdbc.queryForObject("SELECT invoiced_amount FROM oms_ar_line WHERE id=?",java.math.BigDecimal.class,priceLine)).isEqualByComparingTo("0");
+   assertThat(jdbc.queryForObject("SELECT open_amount FROM oms_ar_line WHERE id=?",java.math.BigDecimal.class,priceLine)).isEqualByComparingTo("100");
    assertThat(detail.statusCode()).isEqualTo(200);assertThat(json.readTree(detail.body()).at("/data/principal/openAmount").decimalValue()).isEqualByComparingTo("100");
   }
  }

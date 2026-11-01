@@ -68,7 +68,7 @@ POST `/api/finance/customer-balances/settlements/confirm`：`requestKey`、原 `
 
 `businessType=EXCHANGE_DIFFERENCE`的每条应收必须是PRINCIPAL，且提供`exchangeBasis`：`originalCurrency`、`originalAmount`、`oldRate`、`newRate`、`rateDirection`。原币与结算币须不同，汇率为正，原币金额符合原币精度。`SETTLEMENT_PER_ORIGINAL`表示乘汇率，`ORIGINAL_PER_SETTLEMENT`表示除汇率。旧、新折算值分别用HALF_UP舍入到结算币种精度，差额为新减旧；必须等于行amount，零差额不生成应收。折算值超出金额存储范围会拒绝。
 
-应收详情逐行返回`exchangeBasis`计算快照与`version`，来源记录补充`originalLineId`。依据与应收、来源和初始化流水同事务保存，后续核销不重算依据。其他业务类型禁止夹带汇率依据。汇率差异可开票资格仍待开票服务实现，并默认关闭；保存依据不代表可开票。
+应收详情逐行返回`exchangeBasis`计算快照与`version`，来源记录补充`originalLineId`。依据与应收、来源和初始化流水同事务保存，后续核销不重算依据。其他业务类型禁止夹带汇率依据。汇率差异开票资格由下述显式配置控制，默认关闭；保存依据不代表可开票。
 
 ## 开票额度查询（只读）
 
@@ -80,6 +80,23 @@ POST `/api/finance/invoice-links/eligibility`：`legalEntityId`、`customerId`�
 
 `invoiceSupported=false`说明该行目前不能贡献开票额度，原因见`blockedReason`。汇率差异默认`EXCHANGE_DIFFERENCE_DISABLED`；仅显式设置 `AR_INVOICE_EXCHANGE_DIFFERENCE_ENABLED=true` 才开启，并仍要求存在汇率依据，否则`EXCHANGE_BASIS_MISSING`。该配置不改变应收余额和核销资格。
 
-此接口只提供查询；预览中的发票金额/税率校验、登记事务、红字依赖及撤销仍在后续开票任务实现，不能以查询通过替代写入前校验。
+此接口只提供查询；登记接口在事务内重新校验，不能以查询通过替代写入前校验。
 
 指定originalLineId的负数调整必须保留原行税率（数值相等即可，NULL与零不同）。税率变化应以原税率负数冲回，再由新税率应收承载。历史关联若价税类型或税率不一致，开票额度查询拒绝计算并要求先更正调整，不静默改写税率或返回未减少的旧税率额度。
+
+
+## 开票关联预览、登记及撤销
+
+本服务保存外部发票与应收的关联，不调用税务平台。关联撤销不等于实际发票作废。
+
+POST `/api/finance/invoice-links/preview`，要求 `ar:invoice:write`：`legalEntityId`、`customerId`、`currency`、`kind`（BLUE/RED）、`originalInvoiceId`（RED必填，BLUE不传）、`totalAmount`、`lines`。每行传 `invoiceLineId`、`receivableLineId`、`amount`、`taxRate`（与应收一致，可空）、`originalAllocationId`（RED必填，BLUE不传）。BLUE金额为正，RED金额为负，合计必须等于分配之和。最多500条分配、涉及最多200个开票业务组。返回逐行校验分配及fingerprint，不预占额度。
+
+BLUE同时受行自身余额和原业务组/价税类型/税率的共享额度限制。RED同时受负数应收自身未开票额和原蓝字分配剩余可红金额限制；原蓝字必须有效且范围相同。关联组/原行负数须引用该组/指定原行的蓝字分配；独立负数可引用同范围、同类型、同税率的原蓝字分配。一条外部红字行可分配到多条原分配，必须分别提供originalAllocationId。
+
+POST `/api/finance/invoice-links/register`，要求 `ar:invoice:write`：`requestKey`、`sourceSystem`、`sourceId`、`invoiceNo`、`invoiceDate`、原`preview`对象、`expectedFingerprint`、`reason`。返回关联ID；相同请求重放返回原ID，不同请求重复外部来源拒绝。来源在主体内唯一，撤销后也不复用。预览变化返回409并要求重新预览。
+
+登记采用READ_COMMITTED事务：RED先锁原BLUE，再按ID锁开票业务组，取得锁后重读额度，以版本CAS更新已开票金额。单头、分配、行已开票金额、完整前后流水和幂等结果原子提交。收款、核销、转账户及未核销余额保持原值。税率不一致必须先生成旧税率负数调整和新税率应收，不直接覆盖原行。
+
+GET `/api/finance/invoice-links/detail?id=...&legalEntityId=...`，要求 `ar:read`，返回header与allocations；有效BLUE逐分配返回redAvailableAmount，RED或已撤销BLUE该值为null。
+
+POST `/api/finance/invoice-links/reverse`，要求 `ar:reverse`：`requestKey`、`legalEntityId`、`invoiceId`、`reason`。按持久化分配精确恢复已开票金额、保留历史并新增逆向事件；其他发票分配不变。有有效RED时BLUE拒绝撤销，须先撤销RED。撤销RED可能使原组净开票额度再次为负，此时新BLUE仍受当前共享额度约束；撤销不自动生成应收调整或修改外部发票。

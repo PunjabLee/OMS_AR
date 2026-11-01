@@ -47,3 +47,11 @@ POST `/api/finance/offsets/preview`：`legalEntityId`、`negativeLineId`、正�
 预览返回 `linked`、`originalLineId`、负数行版本、逐行分配、`usedAmount`、请求金额未分配部分 `unallocatedAmount`、抵销后的负数余额绝对值 `remainingCredit`、`fingerprint`。未分配部分保留待核销，不自动进入客户账户。
 
 POST `/api/finance/offsets/confirm`：`requestKey`、原 `preview` 请求、`expectedFingerprint`、`reason`。确认后生成 OFFSET 核销单；正负应收、分配记录及前后流水同事务提交。重复请求返回原核销单；余额或目标成员变化需重新预览。撤销调用通用 `/api/finance/settlements/reverse`，恢复原分配而不按当前规则重算。
+
+## 客户信用余额转入
+
+POST `/api/finance/customer-balances/transfer`：`requestKey`、`legalEntityId`、`negativeLineId`、正数 `amount`、`expectedLineVersion`、`reason`，要求 `ar:balance:transfer`。版本来自应收详情；可将待核销负数余额部分或全部转入，返回来源批次ID。按客户、主体和币种自动开户；同一负数可拆分多批转入。转入减少负数未核销余额并增加负数已转入金额的绝对值，已核销金额保持原值；账户余额不属于实收。
+
+GET `/api/finance/customer-balances/lot-detail?id=批次ID&legalEntityId=主体ID` 返回来源应收行、账户ID、批次原额、已使用金额、状态及版本。GET `/api/finance/customer-balances/detail?id=账户ID&legalEntityId=主体ID` 返回账户余额和版本，两者要求 `ar:read`。
+
+POST `/api/finance/customer-balances/reverse-transfer`：`requestKey`、`legalEntityId`、`lotId`、`reason`，要求 `ar:reverse`。整批撤销；已被使用的批次必须先撤销对应余额抵扣。恢复原负数应收，扣回账户余额，保留批次和逆向流水。账户、批次、应收与流水同事务提交，不支持退款、提现或跨客户/跨币种划转。余额抵扣应收将在下一细分任务开放。

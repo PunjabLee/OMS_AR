@@ -1,0 +1,19 @@
+package com.punjab.oms.ar.dao.finance.impl;
+import com.punjab.oms.ar.dao.finance.CustomerBalanceDao;import com.punjab.oms.ar.domain.entity.finance.*;import com.punjab.oms.ar.mapper.finance.*;
+import com.baomidou.mybatisplus.extension.repository.CrudRepository;import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import org.springframework.stereotype.Repository;import lombok.RequiredArgsConstructor;
+/** 固定先账户再批次及应收加锁，所有金额更新校验版本。 @author Punjab */
+@Repository @RequiredArgsConstructor
+public class CustomerBalanceDaoImpl extends CrudRepository<ArCustomerAccountMapper,ArCustomerAccount> implements CustomerBalanceDao {
+ private final ArBalanceLotMapper lots;private final ArLineMapper lines;private final ArEventMapper events;
+ public ArCustomerAccount detail(com.punjab.oms.ar.domain.bo.finance.BalanceDetailQueryBO query){return account(query.id(),query.legalEntityId(),false);}
+ public ArBalanceLot lotDetail(com.punjab.oms.ar.domain.bo.finance.BalanceDetailQueryBO query){return lot(query.id(),query.legalEntityId(),false);}
+ public ArCustomerAccount reserve(ArCustomerAccount v){baseMapper.reserve(v);return baseMapper.selectOne(new LambdaQueryWrapper<ArCustomerAccount>().eq(ArCustomerAccount::getCustomerId,v.getCustomerId()).eq(ArCustomerAccount::getLegalEntityId,v.getLegalEntityId()).eq(ArCustomerAccount::getCurrency,v.getCurrency()).eq(ArCustomerAccount::getDeleteStatus,false).last("FOR UPDATE"));}
+ public ArCustomerAccount account(Long id,Long entity,boolean lock){var q=new LambdaQueryWrapper<ArCustomerAccount>().eq(ArCustomerAccount::getId,id).eq(ArCustomerAccount::getLegalEntityId,entity).eq(ArCustomerAccount::getDeleteStatus,false);if(lock)q.last("FOR UPDATE");return baseMapper.selectOne(q);}
+ public ArBalanceLot lot(Long id,Long entity,boolean lock){var q=new LambdaQueryWrapper<ArBalanceLot>().eq(ArBalanceLot::getId,id).eq(ArBalanceLot::getLegalEntityId,entity).eq(ArBalanceLot::getDeleteStatus,false);if(lock)q.last("FOR UPDATE");return lots.selectOne(q);}
+ public boolean createLot(ArBalanceLot v){return lots.insert(v)==1;}
+ public boolean updateAccount(ArCustomerAccount v,Long expected){return baseMapper.update(null,new LambdaUpdateWrapper<ArCustomerAccount>().eq(ArCustomerAccount::getId,v.getId()).eq(ArCustomerAccount::getVersion,expected).eq(ArCustomerAccount::getDeleteStatus,false).set(ArCustomerAccount::getBalanceAmount,v.getBalanceAmount()).set(ArCustomerAccount::getVersion,v.getVersion()).set(ArCustomerAccount::getUpdatedBy,v.getUpdatedBy()).set(ArCustomerAccount::getUpdatedTime,v.getUpdatedTime()))==1;}
+ public boolean updateLot(ArBalanceLot v,Long expected){return lots.update(null,new LambdaUpdateWrapper<ArBalanceLot>().eq(ArBalanceLot::getId,v.getId()).eq(ArBalanceLot::getVersion,expected).eq(ArBalanceLot::getDeleteStatus,false).set(ArBalanceLot::getUsedAmount,v.getUsedAmount()).set(ArBalanceLot::getStatus,v.getStatus()).set(ArBalanceLot::getVersion,v.getVersion()).set(ArBalanceLot::getUpdatedBy,v.getUpdatedBy()).set(ArBalanceLot::getUpdatedTime,v.getUpdatedTime()))==1;}
+ public boolean updateTransferredLine(ArLine v,Long expected){return lines.update(null,new LambdaUpdateWrapper<ArLine>().eq(ArLine::getId,v.getId()).eq(ArLine::getVersion,expected).eq(ArLine::getDeleteStatus,false).eq(ArLine::getStatus,"ACTIVE").set(ArLine::getTransferredAmount,v.getTransferredAmount()).set(ArLine::getOpenAmount,v.getOpenAmount()).set(ArLine::getVersion,v.getVersion()).set(ArLine::getUpdatedBy,v.getUpdatedBy()).set(ArLine::getUpdatedTime,v.getUpdatedTime()))==1;}
+ public Long transferEvent(Long id){var event=events.selectOne(new LambdaQueryWrapper<ArEvent>().eq(ArEvent::getEventType,"BALANCE_TRANSFERRED").eq(ArEvent::getTriggerType,"BALANCE_LOT").eq(ArEvent::getTriggerId,id.toString()).eq(ArEvent::getDeleteStatus,false));return event==null?null:event.getId();}
+}

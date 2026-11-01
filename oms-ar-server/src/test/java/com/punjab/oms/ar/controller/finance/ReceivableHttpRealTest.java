@@ -25,14 +25,14 @@ class ReceivableHttpRealTest {
   p.add("spring.datasource.username",()->"oms_ar");p.add("spring.datasource.password",()->System.getenv("AR_TEST_PASSWORD"));
   p.add("ar.auth.clients[0].token",()->TOKEN);p.add("ar.auth.clients[0].username",()->"http-integration");
   p.add("ar.auth.clients[0].legal-entities[0]",()->"1");
-  p.add("ar.auth.clients[0].permissions[0]",()->"ar:create");p.add("ar.auth.clients[0].permissions[1]",()->"ar:read");p.add("ar.auth.clients[0].permissions[2]",()->"ar:receipt:create");p.add("ar.auth.clients[0].permissions[3]",()->"ar:settle");p.add("ar.auth.clients[0].permissions[4]",()->"ar:reverse");
+  p.add("ar.auth.clients[0].permissions[0]",()->"ar:create");p.add("ar.auth.clients[0].permissions[1]",()->"ar:read");p.add("ar.auth.clients[0].permissions[2]",()->"ar:receipt:create");p.add("ar.auth.clients[0].permissions[3]",()->"ar:settle");p.add("ar.auth.clients[0].permissions[4]",()->"ar:reverse");p.add("ar.auth.clients[0].permissions[5]",()->"ar:balance:transfer");
  }
  @LocalServerPort int port;
  @Autowired JdbcTemplate jdbc;
  @Autowired ObjectMapper json;
  @Test @DisplayName("真实HTTP鉴权、创建、重放及详情完整闭环") void createReplayRead() throws Exception {
   assertThat(jdbc.queryForObject("SELECT DATABASE()",String.class)).isEqualTo("oms_ar_test");
-  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql","V003__ar_receipt.sql","V004__ar_settlement.sql","V005__ar_adjustment_link.sql"))for(String sql:Files.readString(Path.of("../scratch/dbddl/"+name)).split(";"))if(!sql.isBlank())jdbc.execute(sql);
+  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql","V003__ar_receipt.sql","V004__ar_settlement.sql","V005__ar_adjustment_link.sql","V006__ar_customer_balance.sql"))for(String sql:Files.readString(Path.of("../scratch/dbddl/"+name)).split(";"))if(!sql.isBlank())jdbc.execute(sql);
   String root="http://127.0.0.1:"+port+"/api/finance/receivables";
   String body="{\"requestKey\":\""+UUID.randomUUID()+"\",\"customerId\":1,\"legalEntityId\":1,\"currency\":\"CNY\",\"businessType\":\"SERVICE\",\"businessDate\":\"2026-10-31\",\"reason\":\"http test\",\"lines\":[{\"groupKey\":\"A\",\"amountType\":\"PRINCIPAL\",\"amount\":100}]}";
   try(var client=HttpClient.newHttpClient()){
@@ -69,6 +69,12 @@ class ReceivableHttpRealTest {
    long offsetId=post(client,"http://127.0.0.1:"+port+"/api/finance/offsets/confirm",Map.of("requestKey",UUID.randomUUID().toString(),"preview",offsetRequest,"expectedFingerprint",offsetPreview.at("/data/fingerprint").asText(),"reason","http offset")).get("data").asLong();
    assertThat(offsetId).isPositive();
    post(client,settlementRoot+"/reverse",Map.of("requestKey",UUID.randomUUID().toString(),"legalEntityId",1,"settlementId",offsetId,"reason","http offset reverse"));
+   assertThat(jdbc.queryForObject("SELECT open_amount FROM oms_ar_line WHERE id=?",java.math.BigDecimal.class,creditLine)).isEqualByComparingTo("-10");
+   long creditVersion=jdbc.queryForObject("SELECT version FROM oms_ar_line WHERE id=?",Long.class,creditLine);
+   String balancesRoot="http://127.0.0.1:"+port+"/api/finance/customer-balances";
+   long lotId=post(client,balancesRoot+"/transfer",Map.of("requestKey",UUID.randomUUID().toString(),"legalEntityId",1,"negativeLineId",creditLine,"amount",7,"expectedLineVersion",creditVersion,"reason","http credit transfer")).get("data").asLong();assertThat(lotId).isPositive();
+   var lotResult=client.send(HttpRequest.newBuilder(URI.create(balancesRoot+"/lot-detail?id="+lotId+"&legalEntityId=1")).header("Authorization","Bearer "+TOKEN).GET().build(),HttpResponse.BodyHandlers.ofString());assertThat(lotResult.statusCode()).isEqualTo(200);assertThat(json.readTree(lotResult.body()).at("/data/sourceLineId").asLong()).isEqualTo(creditLine);
+   post(client,balancesRoot+"/reverse-transfer",Map.of("requestKey",UUID.randomUUID().toString(),"legalEntityId",1,"lotId",lotId,"reason","http credit reverse"));
    assertThat(jdbc.queryForObject("SELECT open_amount FROM oms_ar_line WHERE id=?",java.math.BigDecimal.class,creditLine)).isEqualByComparingTo("-10");
    assertThat(detail.statusCode()).isEqualTo(200);assertThat(json.readTree(detail.body()).at("/data/principal/openAmount").decimalValue()).isEqualByComparingTo("100");
   }

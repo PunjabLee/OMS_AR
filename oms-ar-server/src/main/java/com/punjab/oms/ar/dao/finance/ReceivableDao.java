@@ -11,6 +11,8 @@ public interface ReceivableDao {
  boolean createDocument(ArDocument value);
  boolean createGroup(ArGroup value);
  boolean createLine(ArLine value);
+ boolean createExchangeBasis(ArExchangeBasis value);
+ java.util.List<ArExchangeBasis> exchangeBases(java.util.List<Long> lineIds);
  boolean createSource(ArSource value);
  boolean createEvent(ArEvent value);
  boolean createChange(ArChange value);

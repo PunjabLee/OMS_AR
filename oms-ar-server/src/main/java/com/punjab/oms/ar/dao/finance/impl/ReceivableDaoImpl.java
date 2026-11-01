@@ -13,6 +13,7 @@ public class ReceivableDaoImpl extends CrudRepository<ArDocumentMapper,ArDocumen
  private final ArAdjustmentLinkMapper links;
  private final ArLineMapper lines;
  private final ArSourceMapper sources;
+ private final ArExchangeBasisMapper exchangeBases;
  private final ArOperationMapper operations;
  private final ArEventMapper events;
  private final ArChangeMapper changes;
@@ -31,6 +32,8 @@ public class ReceivableDaoImpl extends CrudRepository<ArDocumentMapper,ArDocumen
  public boolean createDocument(ArDocument value){return baseMapper.insert(value)==1;}
  public boolean createGroup(ArGroup value){return groups.insert(value)==1;}
  public boolean createLine(ArLine value){return lines.insert(value)==1;}
+ public boolean createExchangeBasis(ArExchangeBasis value){return exchangeBases.insert(value)==1;}
+ public java.util.List<ArExchangeBasis> exchangeBases(java.util.List<Long> ids){if(ids.isEmpty())return java.util.List.of();return exchangeBases.selectList(new LambdaQueryWrapper<ArExchangeBasis>().in(ArExchangeBasis::getLineId,ids).eq(ArExchangeBasis::getDeleteStatus,false));}
  public boolean createSource(ArSource value){return sources.insert(value)==1;}
  public boolean createEvent(ArEvent value){return events.insert(value)==1;}
  public boolean createChange(ArChange value){return changes.insert(value)==1;}

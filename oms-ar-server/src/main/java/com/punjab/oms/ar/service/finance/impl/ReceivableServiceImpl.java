@@ -25,6 +25,7 @@ public class ReceivableServiceImpl implements ReceivableService {
  private final ReceivableConverter converter;
  private final ObjectMapper json;
  private final Validator validator;
+ private final com.punjab.oms.ar.common.utils.ExchangeDifferenceCalculator exchangeCalculator;
 
  @Override @Transactional(rollbackFor=Exception.class)
  public Long create(ReceivableCreateRequest request){
@@ -97,6 +98,11 @@ public class ReceivableServiceImpl implements ReceivableService {
     link.setRelatedGroupId(input.originalLineId()!=null?originals.get(input.originalLineId()).getGroupId():input.groupId());
     persist(dao.createAdjustmentLink(link));snapshot(event,"ADJUSTMENT_LINK",link,actor,now);
    }
+   if(input.exchangeBasis()!=null){
+    var basis=input.exchangeBasis();var calculated=exchangeCalculator.calculate(basis,request.currency());var record=audit(new ArExchangeBasis(),actor,now);
+    record.setLineId(line.getId());record.setOriginalCurrency(basis.originalCurrency());record.setOriginalAmount(basis.originalAmount());record.setOldRate(basis.oldRate());record.setNewRate(basis.newRate());record.setRateDirection(basis.rateDirection().name());record.setOldSettlementAmount(calculated.oldSettlementAmount());record.setNewSettlementAmount(calculated.newSettlementAmount());record.setConfirmedDifference(calculated.difference());
+    persist(dao.createExchangeBasis(record));snapshot(event,"EXCHANGE_BASIS",record,actor,now);
+   }
    if(input.source()!=null){
     var source=input.source();ArSource record=audit(new ArSource(),actor,now);
     record.setLineId(line.getId());record.setSourceSystem(source.system());record.setSourceType(source.type());
@@ -123,6 +129,9 @@ public class ReceivableServiceImpl implements ReceivableService {
     throw new ServiceException("销项税行必须提供税率和计税依据");
    if("EXCHANGE_DIFFERENCE".equals(request.businessType()) && line.amountType()!=AmountType.PRINCIPAL)
     throw new ServiceException("汇率差异必须归为价款");
+   if("EXCHANGE_DIFFERENCE".equals(request.businessType())){
+    var calculated=exchangeCalculator.calculate(line.exchangeBasis(),request.currency());if(calculated.difference().compareTo(line.amount())!=0)throw new ServiceException("汇率差额与结算币种应收金额不一致");
+   }else if(line.exchangeBasis()!=null)throw new ServiceException("仅汇率差异应收允许携带汇率依据");
    if(groupReferences.containsKey(line.groupKey()) && !Objects.equals(groupReferences.get(line.groupKey()),line.groupId()))
     throw new ServiceException("同一业务组键的关联目标不一致");
    groupReferences.put(line.groupKey(),line.groupId());

@@ -63,3 +63,9 @@ POST `/api/finance/customer-balances/settlements/preview`：`legalEntityId`、`a
 POST `/api/finance/customer-balances/settlements/confirm`：`requestKey`、原 `preview`、`expectedFingerprint`、`reason`。账户、可用批次、目标应收成员或余额变化均要求重新预览。确认创建BALANCE核销单，同时保存核销账户及每条应收分配对应的来源批次/金额。只扣实际使用额，其余留在账户；原转入应收的已转入金额保持不变，不增加实收。
 
 通用 `/api/finance/settlements/reverse` 按原应收及原来源批次恢复，不重新执行FIFO；原单据/分配保留，新增逆向事件。某批次仍有其他核销占用时，不能撤销该批次转入。账户→批次→业务组→明细固定锁序配合版本校验，抵扣、反核销与转入撤销在同一账户上串行校验。
+
+## 汇率差异依据
+
+`businessType=EXCHANGE_DIFFERENCE`的每条应收必须是PRINCIPAL，且提供`exchangeBasis`：`originalCurrency`、`originalAmount`、`oldRate`、`newRate`、`rateDirection`。原币与结算币须不同，汇率为正，原币金额符合原币精度。`SETTLEMENT_PER_ORIGINAL`表示乘汇率，`ORIGINAL_PER_SETTLEMENT`表示除汇率。旧、新折算值分别用HALF_UP舍入到结算币种精度，差额为新减旧；必须等于行amount，零差额不生成应收。折算值超出金额存储范围会拒绝。
+
+应收详情逐行返回`exchangeBasis`计算快照与`version`，来源记录补充`originalLineId`。依据与应收、来源和初始化流水同事务保存，后续核销不重算依据。其他业务类型禁止夹带汇率依据。汇率差异可开票资格仍待开票服务实现，并默认关闭；保存依据不代表可开票。

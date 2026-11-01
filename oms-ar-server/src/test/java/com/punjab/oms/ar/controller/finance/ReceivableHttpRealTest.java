@@ -32,7 +32,7 @@ class ReceivableHttpRealTest {
  @Autowired ObjectMapper json;
  @Test @DisplayName("真实HTTP鉴权、创建、重放及详情完整闭环") void createReplayRead() throws Exception {
   assertThat(jdbc.queryForObject("SELECT DATABASE()",String.class)).isEqualTo("oms_ar_test");
-  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql","V003__ar_receipt.sql","V004__ar_settlement.sql","V005__ar_adjustment_link.sql","V006__ar_customer_balance.sql","V007__ar_balance_settlement.sql"))for(String sql:Files.readString(Path.of("../scratch/dbddl/"+name)).split(";"))if(!sql.isBlank())jdbc.execute(sql);
+  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql","V003__ar_receipt.sql","V004__ar_settlement.sql","V005__ar_adjustment_link.sql","V006__ar_customer_balance.sql","V007__ar_balance_settlement.sql","V009__ar_exchange_basis.sql"))for(String sql:Files.readString(Path.of("../scratch/dbddl/"+name)).split(";"))if(!sql.isBlank())jdbc.execute(sql);
   String root="http://127.0.0.1:"+port+"/api/finance/receivables";
   String body="{\"requestKey\":\""+UUID.randomUUID()+"\",\"customerId\":1,\"legalEntityId\":1,\"currency\":\"CNY\",\"businessType\":\"SERVICE\",\"businessDate\":\"2026-10-31\",\"reason\":\"http test\",\"lines\":[{\"groupKey\":\"A\",\"amountType\":\"PRINCIPAL\",\"amount\":100}]}";
   try(var client=HttpClient.newHttpClient()){
@@ -81,6 +81,10 @@ class ReceivableHttpRealTest {
    post(client,settlementRoot+"/reverse",Map.of("requestKey",UUID.randomUUID().toString(),"legalEntityId",1,"settlementId",spendId,"reason","http credit spend reverse"));
    post(client,balancesRoot+"/reverse-transfer",Map.of("requestKey",UUID.randomUUID().toString(),"legalEntityId",1,"lotId",lotId,"reason","http credit reverse"));
    assertThat(jdbc.queryForObject("SELECT open_amount FROM oms_ar_line WHERE id=?",java.math.BigDecimal.class,creditLine)).isEqualByComparingTo("-10");
+   var fxBody=(com.fasterxml.jackson.databind.node.ObjectNode)json.readTree(body);fxBody.put("requestKey",UUID.randomUUID().toString());fxBody.put("businessType","EXCHANGE_DIFFERENCE");
+   var fxLine=(com.fasterxml.jackson.databind.node.ObjectNode)fxBody.at("/lines/0");fxLine.put("amount",20);fxLine.set("exchangeBasis",json.valueToTree(Map.of("originalCurrency","USD","originalAmount",100,"oldRate",new java.math.BigDecimal("7.1"),"newRate",new java.math.BigDecimal("7.3"),"rateDirection","SETTLEMENT_PER_ORIGINAL")));
+   long fxDoc=post(client,root+"/create",fxBody).get("data").asLong();
+   var fxDetail=client.send(HttpRequest.newBuilder(URI.create(root+"/detail?id="+fxDoc+"&legalEntityId=1")).header("Authorization","Bearer "+TOKEN).GET().build(),HttpResponse.BodyHandlers.ofString());assertThat(fxDetail.statusCode()).isEqualTo(200);assertThat(json.readTree(fxDetail.body()).at("/data/lines/0/exchangeBasis/confirmedDifference").decimalValue()).isEqualByComparingTo("20");assertThat(json.readTree(fxDetail.body()).at("/data/lines/0/version").asLong(-1)).isZero();
    assertThat(detail.statusCode()).isEqualTo(200);assertThat(json.readTree(detail.body()).at("/data/principal/openAmount").decimalValue()).isEqualByComparingTo("100");
   }
  }

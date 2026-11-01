@@ -29,7 +29,8 @@ public class ReceivableQueryServiceImpl implements ReceivableQueryService {
   if(document==null)throw new ServiceException("应收单不存在或不可访问");
   var lines=dao.lines(document.getId());
   var sources=dao.sources(lines.stream().map(ArLine::getId).toList()).stream().collect(Collectors.toMap(ArSource::getLineId,Function.identity()));
-  var result=lines.stream().map(line->converter.toResponse(line,converter.toResponse(sources.get(line.getId())))).toList();
+  var exchangeBases=dao.exchangeBases(lines.stream().map(ArLine::getId).toList()).stream().collect(Collectors.toMap(ArExchangeBasis::getLineId,Function.identity()));
+  var result=lines.stream().map(line->converter.toResponse(line,converter.toResponse(sources.get(line.getId())),converter.toResponse(exchangeBases.get(line.getId())))).toList();
   var active=lines.stream().filter(line->"ACTIVE".equals(line.getStatus())).toList();
   String state;
   if("VOID".equals(document.getStatus()))state="VOID";

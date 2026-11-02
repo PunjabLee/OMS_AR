@@ -27,7 +27,7 @@ Java测试位于oms-ar-server/src/test/java/com/punjab/oms/ar；业务实现位�
 
 ## 验证记录
 
-2026-11-03的scripts/verify-local已全部通过：Python启动配置5项、Java默认37项、业务实库201项、独立迁移/结构12项及打包应用5组验收。日志work/local-verification-final.log；启动报告work/startup-smoke-result.json确认临时数据库已清理且未发送外部通知。最终评审引起代码变更时须重新运行相应测试及统一验收。
+2026-11-03的scripts/verify-local已全部通过：Python启动配置5项、Java默认37项、业务实库201项、独立迁移/结构12项及打包应用5组验收。复跑记录work/final-acceptance-verification.log（05:55完成），历史记录work/local-verification-final.log；启动报告work/startup-smoke-result.json确认临时数据库已清理且未发送外部通知。最终评审引起代码变更时须重新运行相应测试及统一验收。
 
 ## 已明确的范围与限制
 
@@ -39,3 +39,7 @@ Java测试位于oms-ar-server/src/test/java/com/punjab/oms/ar；业务实现位�
 - 无来源行ID表示独立的单据级来源槽，不隐式代表该单据所有具体行。
 - 表结构校验只在启动时检查固定MySQL版本的21张业务表结构，不验证业务数据、权限、触发器或存储过程；不自动接管非空旧库。
 - 当前为本机开发交付，未完成生产安全审查、真实身份系统集成或生产部署；Spring Boot补丁升级需在发布前单独评估。
+
+## 最终评审状态
+
+2026-11-03已派发新的只读全分支评审（实现截至2ed3dd8）。评审反馈已读鉴权、通知派发/租约/重试、开票额度及作废锁定路径，尚未确认问题；随后因评审工具调用额度限制终止，没有形成完整报告。该反馈不等于评审通过。最终评审及整体完成门禁保持未勾选，需要恢复完整独立评审后再作结论。

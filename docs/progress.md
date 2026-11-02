@@ -127,3 +127,7 @@ Ruling: 来源无行号是独立的单据级槽，NULL与空字符串严格区�
 上次自动审批用量限制导致最终修改/回归未执行；恢复后原路径重试成功。本机Docker停止使首轮回归连接失败，启动Docker及本项目oms-ar-mysql-1，确认原进程结束和容器healthy后完整重跑，未操作dam-mysql。最终133项实库/HTTP通过（work/void-restored-real.log）；默认26项通过、133项门禁跳过（work/void-final-default.log）；git diff --check通过。
 
 后续仍需核销/账户/批次/调整关联及生命周期查询、对账、通知待发送及重试、正式版本迁移/启动验收和最终整分支评审。整体目标保持进行中。
+
+任务10a完成（2026-11-02）：应收详情补齐独立调整关系。每行返回adjustment.relatedGroupId/originalLineId，独立负数为null；无需来源单据，物理组和关联组不混淆。DAO按详情行ID批量读取未删除关联，经Converter输出，沿用详情主体授权与一致读事务。
+
+验证：新增无来源原行调整和独立负数详情回归，先观察原行ID缺失断言失败，再实现并通过。全134项实库/HTTP通过（work/adjustment-detail-real.log），默认26项通过/134项门禁跳过（work/adjustment-detail-default.log），git diff --check通过。尚需生命周期、核销、账户及批次列表查询、对账、通知重试、正式迁移与整体最终评审。

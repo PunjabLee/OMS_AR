@@ -148,4 +148,18 @@ class ReceivableCreateRealTest {
   assertThatThrownBy(()->queries.page(q)).isInstanceOf(ServiceException.class).hasMessage("查询参数无效");
   q.setSize(20);q.setPage(0);assertThatThrownBy(()->queries.page(q)).isInstanceOf(ServiceException.class);
  }
+ @Test @DisplayName("无来源调整详情仍返回原组及原行，独立负数无调整关联") void adjustmentDetail(){
+  long original=service.create(request(key(),line("A",null,AmountType.PRINCIPAL,"100",null)));
+  var originalRow=queries.detail(new com.punjab.oms.ar.domain.query.finance.ReceivableDetailQuery(original,1L)).lines().getFirst();
+  long adjusted=service.create(request(key(),new Line("A",null,AmountType.PRINCIPAL,new BigDecimal("-20"),null,null,null,originalRow.id())));
+  var detail=queries.detail(new com.punjab.oms.ar.domain.query.finance.ReceivableDetailQuery(adjusted,1L));
+  var tree=new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules().valueToTree(detail);
+  assertThat(tree.at("/lines/0/adjustment/originalLineId").asLong()).isEqualTo(originalRow.id());
+  assertThat(tree.at("/lines/0/adjustment/relatedGroupId").asLong()).isEqualTo(originalRow.groupId());
+  assertThat(detail.lines().getFirst().source()).isNull();
+  long independent=service.create(request(key(),line("A",null,AmountType.PRINCIPAL,"-10",null)));
+  var independentTree=new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules().valueToTree(queries.detail(new com.punjab.oms.ar.domain.query.finance.ReceivableDetailQuery(independent,1L)));
+  assertThat(independentTree.at("/lines/0/adjustment").isNull()).isTrue();
+ }
+
 }

@@ -30,6 +30,7 @@ public class ReceivableDaoImpl extends CrudRepository<ArDocumentMapper,ArDocumen
  public boolean complete(ArOperation value){return operations.updateById(value)==1;}
  public ArGroup group(Long id){return groups.selectOne(new LambdaQueryWrapper<ArGroup>().eq(ArGroup::getId,id).eq(ArGroup::getDeleteStatus,false).last("FOR UPDATE"));}
  public ArLine line(Long id,boolean lock){var q=new LambdaQueryWrapper<ArLine>().eq(ArLine::getId,id).eq(ArLine::getDeleteStatus,false);if(lock)q.last("FOR UPDATE");return lines.selectOne(q);}
+ public java.util.List<ArAdjustmentLink> adjustmentLinks(java.util.List<Long> ids){if(ids.isEmpty())return java.util.List.of();return links.selectList(new LambdaQueryWrapper<ArAdjustmentLink>().in(ArAdjustmentLink::getLineId,ids).eq(ArAdjustmentLink::getDeleteStatus,false));}
  public ArAdjustmentLink adjustmentLink(Long lineId){return links.selectOne(new LambdaQueryWrapper<ArAdjustmentLink>().eq(ArAdjustmentLink::getLineId,lineId).eq(ArAdjustmentLink::getDeleteStatus,false));}
  public boolean createAdjustmentLink(ArAdjustmentLink value){return links.insert(value)==1;}
  public boolean createDocument(ArDocument value){return baseMapper.insert(value)==1;}

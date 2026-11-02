@@ -113,3 +113,5 @@ POST `/api/finance/receivables/void-upstream`：`requestKey`、`legalEntityId`�
 有效核销、余额转入、开票关联或非零占用均阻止作废；须先通过原业务撤销。外部有效调整指定原行时先取消调整；不能扩大原组/价税类型/税率的共享开票缺口。原额、税率、来源及历史分配保留，只将作废行open归零。来源blocked阻止新事件重新生成，不提供隐式恢复或自动解除入口。
 
 事务锁序为来源→单头→有序物理及开票业务组→行，READ_COMMITTED重读依赖；状态、来源拦截、完整前后快照和幂等结果原子提交。此动作不自动撤销收款或外部税务发票。外部通知投递仍待后续任务实现。
+
+应收详情每行另返回`adjustment`（无关联为null），包含`relatedGroupId`及可空`originalLineId`。即使`source=null`，关联负数也返回该关系；物理groupId与开票/调整关联组分开表达，不从来源是否存在推断调整关系。

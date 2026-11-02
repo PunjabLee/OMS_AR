@@ -8,6 +8,7 @@ public interface ReceivableDao {
  boolean complete(ArOperation operation);
  ArGroup group(Long id);
  ArLine line(Long id, boolean lock);
+ java.util.List<ArAdjustmentLink> adjustmentLinks(java.util.List<Long> lineIds);
  ArAdjustmentLink adjustmentLink(Long lineId);
  boolean createAdjustmentLink(ArAdjustmentLink value);
  boolean createDocument(ArDocument value);

@@ -30,7 +30,8 @@ public class ReceivableQueryServiceImpl implements ReceivableQueryService {
   var lines=dao.lines(document.getId());
   var sources=dao.sources(lines.stream().map(ArLine::getId).toList()).stream().collect(Collectors.toMap(ArSource::getLineId,Function.identity()));
   var exchangeBases=dao.exchangeBases(lines.stream().map(ArLine::getId).toList()).stream().collect(Collectors.toMap(ArExchangeBasis::getLineId,Function.identity()));
-  var result=lines.stream().map(line->converter.toResponse(line,converter.toResponse(sources.get(line.getId())),converter.toResponse(exchangeBases.get(line.getId())))).toList();
+  var adjustments=dao.adjustmentLinks(lines.stream().map(ArLine::getId).toList()).stream().collect(Collectors.toMap(ArAdjustmentLink::getLineId,Function.identity()));
+  var result=lines.stream().map(line->converter.toResponse(line,converter.toResponse(sources.get(line.getId())),converter.toResponse(exchangeBases.get(line.getId())),converter.toResponse(adjustments.get(line.getId())))).toList();
   var active=lines.stream().filter(line->"ACTIVE".equals(line.getStatus())).toList();
   String state;
   if("VOID".equals(document.getStatus()))state="VOID";

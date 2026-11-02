@@ -125,6 +125,7 @@ class ReceivableHttpRealTest {
     var badPage=client.send(HttpRequest.newBuilder(URI.create(endpoint)).header("Authorization","Bearer "+TOKEN).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString("{\"legalEntityId\":1,\"size\":201}")).build(),HttpResponse.BodyHandlers.ofString());assertThat(badPage.statusCode()).isEqualTo(400);
     var forbiddenPage=client.send(HttpRequest.newBuilder(URI.create(endpoint)).header("Authorization","Bearer "+TOKEN).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString("{\"legalEntityId\":2}")).build(),HttpResponse.BodyHandlers.ofString());assertThat(forbiddenPage.statusCode()).isEqualTo(403);
    }
+   var reconciliationPage=post(client,"http://127.0.0.1:"+port+"/api/finance/reconciliation/page",Map.of("legalEntityId",1,"customerId",Long.MAX_VALUE,"currency","CNY"));assertThat(reconciliationPage.at("/data/total").asLong()).isZero();
    var voidBody=Map.of("requestKey",UUID.randomUUID().toString(),"legalEntityId",1,"documentId",id,"reason","http void");
    var voidResult=post(client,root+"/void",voidBody);assertThat(voidResult.at("/data/lineIds/0").asLong()).isEqualTo(priceLine);
    assertThat(post(client,root+"/void",voidBody).at("/data/eventId").asLong()).isEqualTo(voidResult.at("/data/eventId").asLong());

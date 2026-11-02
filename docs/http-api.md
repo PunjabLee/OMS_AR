@@ -133,3 +133,11 @@ GET `/api/finance/settlements/detail?id=...&legalEntityId=...`，要求`ar:read`
 - `/api/finance/settlements/page`：可选status=POSTED/REVERSED、settlementType=RECEIPT/OFFSET/BALANCE、receiptId，返回核销单Header。
 - `/api/finance/customer-balances/page`：返回账户ID、客户/主体/币种、余额和版本。
 - `/api/finance/customer-balances/lots/page`：可选status=ACTIVE/REVERSED、accountId、sourceLineId，返回原转入金额、已使用金额及来源行。ACTIVE批次可用额为amount-usedAmount；REVERSED历史金额不代表当前可用余额。
+
+## 内部金额对账
+
+POST `/api/finance/reconciliation/page`，要求`ar:read`；legalEntityId/customerId/currency均必填，page默认1、size默认20且最多200。仅返回差异，记录字段为rule/objectType/objectId/storedAmount/expectedAmount；按规则、对象ID排序，总数与取页在同一RR快照中执行。无差异不代表完成银行、税务或全部审计核验。
+
+规则：LINE_SETTLED对照有效正负核销分配；LINE_TRANSFERRED对照有效转入批次负额；LINE_INVOICED对照有效蓝红发票分配；RECEIPT_ALLOCATED对照有效收款核销单；ACCOUNT_BALANCE对照有效批次amount-usedAmount；LOT_USED对照有效余额抵扣使用明细；SETTLEMENT_TOTAL核对原核销单与原分配合计；BALANCE_ALLOCATION_USAGE核对每条余额分配与来源批次金额合计。后两项保留对REVERSED历史结构的检查，前六项仅有效业务影响当前投影。
+
+接口不修改任何余额或流水。审计版本快照、关联范围/结构完整性等进一步检查尚在后续任务中，不能将本报告无差异解释为全部数据正确。

@@ -147,3 +147,13 @@ Ruling: 来源无行号是独立的单据级槽，NULL与空字符串严格区�
 验证：HTTP初始404红灯后实现，覆盖三种记录筛选/总数/原ID、超大页码空结果；全137项实库/HTTP及26项默认测试通过（work/finance-pages-real.log、work/finance-pages-default.log）。追加三个入口size=201返回400、主体越权返回403，单独HTTP通过（work/finance-pages-http.log）。git diff --check通过。当前未接入MyBatis分页插件，沿用固定SQL分页方式，LIMIT/OFFSET仅由服务校验后的整数生成。
 
 下一阶段：对账不变量校验与差异报告，通知outbox及重试、正式版本化迁移与本机启动验收、最终整分支审查。整体目标未完成。
+
+任务11a进行中（2026-11-02）：自动审批限制恢复后已落盘对账子计划、ReconciliationQuery/Response/Service契约及4项实库失败测试。当前ReconciliationServiceImpl仅为显式抛错的TDD占位，不可交付，未开放HTTP，不提交未完成任务。失败证据work/reconciliation-red.log：正常核销/反核销、LINE_INVOICED差异、LINE_SETTLED与RECEIPT_ALLOCATED差异分页、权限范围均因尚未实现失败；仅在oms_ar_test的独立随机客户fixture制造投影差异。
+
+下一步按docs/superpowers/plans/2026-11-02-ar-reconciliation.md实现8项金额聚合规则、DAO/BO/Converter/HTTP，扩展逐规则故障fixture及权限隔离，完整测试通过后单独提交。其后11b审计结构检查、通知outbox/重试、正式迁移及最终审查仍必做。当前工作区的对账代码为未提交进行中状态；用户.DS_Store不处理。
+
+任务11a完成（2026-11-02）：八项内部金额对账规则与只读HTTP分页报告。Query→BO→DAO→固定SQL，主体/客户/币种必选，ar:read，RR快照计数及分页；记录规则、对象、存储金额及重算金额，不修账。LINE_SETTLED/TRANSFERRED/INVOICED、RECEIPT_ALLOCATED、ACCOUNT_BALANCE、LOT_USED按有效业务；SETTLEMENT_TOTAL与BALANCE_ALLOCATION_USAGE保留历史原分配核对。
+
+验证：首批4项失败测试转绿，扩展至6项实库涵盖八规则差异、正常创建/核销/反核销及开票撤销、分页/范围隔离/权限；HTTP查询契约通过。全143项实库/HTTP通过（work/reconciliation-all-real.log），默认26项通过/143项门禁跳过（work/reconciliation-default.log），git diff --check通过。独立评审review_balance_spend未发现11a阻断问题。非阻断测试补充建议：在11b继续增加负数抵销/反核销和余额核销反核销的正常对账回归，固定负号与状态过滤行为。
+
+11b结构与审计完整性检查尚未实现；本报告无差异不证明全部财务数据正确，更不代表外部银行/税务对账。随后仍需通知outbox/重试、正式版本迁移和本机启动、最终整分支审查。

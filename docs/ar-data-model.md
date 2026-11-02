@@ -1,27 +1,34 @@
 # MySQL 8.0.42 应收逻辑表设计
 
-本文为逻辑模型，不是已执行的DDL。表名前缀 oms_ar_；所有主键 BIGINT 自增。金额建议 DECIMAL(24,8)，税率 DECIMAL(12,8)，汇率 DECIMAL(24,12)，业务金额入账须按币种精度校验。0税率与税率不适用NULL区分。
+本文按当前已落地的21张表说明数据模型，正式DDL以oms-ar-server/src/main/resources/db/migration/V001—V012为准。表名前缀oms_ar_；所有主键BIGINT自增。金额DECIMAL(24,8)，税率DECIMAL(12,8)，汇率DECIMAL(24,12)，业务金额仍须按币种精度校验。0税率与税率不适用NULL区分。
 
-## 表清单
+## 已落地表清单
 
-| 表 | 主要字段与约束 |
-| --- | --- |
-| document | doc_no、customer_id、legal_entity_id、currency、business_type、generation_mode、business_date、due_date、status、version；主体内编号唯一 |
-| business_group | group_no、customer_id、legal_entity_id、currency、business_date；跨单关联但禁止跨客户/主体/币种 |
-| line | document_id、group_id、line_no、amount_type、receivable_amount、settled_amount、transferred_amount、open_amount、invoiced_amount、tax_rate、tax_base_amount、status、version；单据内行号唯一 |
-| line_source | line_id、source_system、source_type、source_no、source_id、source_line_id、source_event_id、source_output_key、original_line_id；source_output_key不为空并与来源事件联合唯一 |
-| exchange_basis | line_id、original_currency、original_amount、old_rate、new_rate、rate_direction、confirmed_difference；保留原计算快照 |
-| settlement | settlement_no、settlement_type、customer_id、legal_entity_id、currency、strategy、status、request_key、reverse_of_id |
-| settlement_allocation | settlement_id、sequence_no、positive_line_id、negative_line_id、receipt_reference、balance_lot_id、amount；amount为正值，按类型限制来源字段组合 |
-| balance_account | customer_id、legal_entity_id、currency、available_amount、version；三元组唯一，余额不可负 |
-| balance_transfer | source_line_id、account_id、amount、status、request_key、reverse_of_id；金额为正，原应收转出记负方向 |
-| balance_lot | account_id、transfer_id、original_amount、remaining_amount、version；每笔转入保留来源 |
-| balance_entry | account_id、lot_id、operation_id、delta_amount、before_amount、after_amount；只追加 |
-| invoice_allocation | invoice_id、invoice_line_id、receivable_line_id、amount、tax_rate、event_id、reverse_of_id；红冲保留原关联 |
-| lifecycle_event | event_type、occurred_at、recorded_at、actor、reason、trigger_type、trigger_id、correlation_id、reverse_of_id、schema_version；只追加 |
-| lifecycle_change | event_id、object_type、object_id、before_snapshot、delta_snapshot、after_snapshot、before_version、after_version；快照为JSON |
-| operation_request | legal_entity_id、caller_id、operation_type、request_key、payload_hash、result_reference；前四项联合唯一 |
-| outbox | event_id、destination、payload、delivery_status、attempt_count、next_attempt_at；与业务事务一起插入 |
+以下省略统一前缀oms_ar_，详细关系与ER图见[开发手册](handbook/02-development.md)。
+
+| 表 | 版本 | 关键字段/关系 | 设计目的 |
+| --- | --- | --- | --- |
+| document | V001 | doc_no、范围、business_type、日期、状态、version、作废原因/人/时间 | 应收单头及作废记录 |
+| business_group | V001 | group_no、范围、日期、version | 跨单分组及并发共同锁对象 |
+| line | V001 | document_id、group_id、line_no、amount_type、五金额、税率/依据、状态/version | 当前明细投影 |
+| line_source | V001 | line_id、system/type/no/id/line_id、event_id/output_key、original_line_id | 每行最多一份来源，事件输出防重 |
+| operation_request | V002 | 主体、caller_id、operation_type、request_key、payload_hash、result_reference | 写动作幂等结果 |
+| lifecycle_event | V002 | 类型、双时间、actor、reason、trigger、correlation、reverse_of_id、schema_version | 不可变事件头 |
+| lifecycle_change | V002 | event_id、对象类型/ID、before/delta/after、前后version | 对象级快照 |
+| receipt | V003 | 范围、amount、allocated_amount、来源、received_date、version | 实际收款与分配占用 |
+| settlement | V004 | 类型、receipt_id、范围、amount、strategy、fingerprint、status、version | 核销单；receipt_id仅收款型使用 |
+| settlement_allocation | V004 | settlement_id、sequence_no、positive_line_id、negative_line_id、amount_type、amount | 正数分配金额与双方应收 |
+| adjustment_link | V005 | line_id、related_group_id、original_line_id | 负数的原组与可选原行，不随资金去向变化 |
+| customer_account | V006 | 范围、balance_amount、version | 信用可用余额，三重范围唯一 |
+| balance_lot | V006 | account_id、source_line_id、范围、amount、used_amount、status、version | 一次转入一个批次 |
+| balance_settlement | V007 | settlement_id、account_id | BALANCE核销对应账户 |
+| balance_usage | V007 | settlement_id、allocation_id、lot_id、sequence_no、amount | 应收分配与来源批次多对多桥接 |
+| invoice | V008 | 来源、invoice_no/date、范围、kind、original_invoice_id、total_amount、状态/version | 外部发票关联头 |
+| invoice_allocation | V008 | 发票/外部行/应收行、amount_type、amount、tax_rate、original_allocation_id | 带符号蓝红分配，红字追溯原蓝分配 |
+| exchange_basis | V009 | line_id、原币/额、旧新汇率/折算额、方向、confirmed_difference | 不可变汇率计算依据 |
+| source_guard | V010 | 主体、source_key、原身份、blocked、version | 来源取消与迟到生成串行化 |
+| outbox | V011 | event_id、主体、destination、payload、status、attempt、时间、租约、version | 业务原子入队、可变派发投影 |
+| outbox_retry | V012 | outbox_id、operation_id、reason、前后状态/次数/时间/错误/version | 人工重试不可变运营审计 |
 
 系统字段按指南保存 id、created_time、created_by、updated_time、updated_by、delete_status；业务作废不能通过delete_status隐藏。审计表不提供更新删除业务接口，状态变更写新事件。outbox的投递状态是可变运行数据，不作为不可变审计流水。
 
@@ -38,11 +45,11 @@
 
 line 建 document_id/line_no 唯一索引、group_id/status/id 查询索引；document 建主体/客户/币种/状态/到期日查询索引；分配表为双方应收ID建追溯索引；事件变化为object_type/object_id/event_id建索引。
 
-来源幂等不依赖可空source_line_id，避免无行ID时重复生成。请求唯一性与业务行版本均需数据库约束兜底。金额更新使用行锁或version条件更新，零行更新视为冲突并回滚。使用InnoDB；DDL正式编写时逐项实现外键、CHECK和唯一约束并以MySQL实库用例验证。
+来源幂等不依赖可空source_line_id，避免无行ID时重复生成。请求唯一性与业务行版本均需数据库约束兜底。金额更新使用行锁或version条件更新，零行更新视为冲突并回滚。使用InnoDB；正式DDL已实现外键、CHECK和唯一约束，并以MySQL实库用例验证。来源事件输出唯一键为source_system/source_event_id/source_output_key，不含主体，上游须保证该系统内事件输出命名唯一。
 
 ## 已落地的余额结构（V006–V007）
 
-逻辑模型中的账户落地为 `customer_account`，余额字段为 `balance_amount`。每次转入直接生成 `balance_lot`，保存 `source_line_id`、原额 `amount`、已使用额 `used_amount`、`status` 和版本，不另建同义的转入单表。转入/撤销的操作键与逆向关联分别由 `operation_request`、`lifecycle_event` 管理。
+早期逻辑模型中的账户落地为 `customer_account`，余额字段为 `balance_amount`。每次转入直接生成 `balance_lot`，保存 `source_line_id`、原额 `amount`、已使用额 `used_amount`、`status` 和版本，不另建同义的转入单表。转入/撤销的操作键与逆向关联分别由 `operation_request`、`lifecycle_event` 管理。
 
 余额抵扣使用既有 `settlement`（类型BALANCE）及 `settlement_allocation` 保存应收分配；`balance_settlement` 记录账户，`balance_usage` 记录每条应收分配对应的来源批次和金额。一条应收分配可以使用多个来源批次，因此批次ID没有直接放在应收分配表上。收款来源保存在收款核销单的 `receipt_id`，正负抵销来源保存在分配的 `negative_line_id`。
 
@@ -87,7 +94,7 @@ payload外层schemaVersion=1，包含eventId、legalEntityId、destination、完
 
 领取和结果确认分别为REQUIRES_NEW/READ_COMMITTED事务。固定SQL用于数据库时间、行锁及CAS，属于DAO规范的明确扩展；DAO本身不开事务。确认必须同时匹配ID、主体、目的地、PROCESSING、租约令牌及未过期时间。过期工作者即使尚无人重领也不能确认。确认成功清空租约；成功保存sent_time，失败按尝试次数进入RETRY或DEAD。仅保存HTTP状态或预定义错误分类，不保存远端正文、异常详情或凭据。通知payload与财务余额不变。
 
-租约只能约束本地状态，不能撤回远端已经处理的请求；接收端仍必须按eventId+destination去重。下一步发送器须在事务外发出请求、限制总超时，并使用超过请求超时的租约。当前租约服务没有HTTP映射，也未开启调度或外发。
+租约只能约束本地状态，不能撤回远端已经处理的请求；接收端仍必须按eventId+destination去重。发送器已在事务外发出请求、限制总超时并使用更长租约；租约服务不提供HTTP映射。调度和外发能力已实现，但默认关闭，见下节。
 
 
 ## 通知发送器（默认关闭）

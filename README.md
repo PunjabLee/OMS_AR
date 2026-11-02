@@ -35,6 +35,10 @@ oms_ar_test用于业务夹具，首次自动创建，后续不清空；这些用
 
 也可单独执行scripts/test-mysql-all、scripts/test-mysql-migration和scripts/test-application-startup。默认mvn test不连接数据库，实际写库测试均有显式门禁。测试专用关闭迁移/结构校验配置不会打入应用JAR。
 
+## 业务与开发手册
+
+[完整手册目录](docs/handbook/README.md)包含业务规则与流程、代码模块与实际数据模型、关键算法与事务并发、接口示例和运行排障，并提供Mermaid流程、时序、状态和ER图。
+
 ## 设计与状态
 
 - [设计基线](docs/superpowers/specs/2026-10-31-ar-project-design.md)

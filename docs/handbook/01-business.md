@@ -172,7 +172,7 @@ stateDiagram-v2
     VOID --> [*]
 ```
 
-图中是单头状态；核销程度另由详情计算：UNSETTLED、PARTIAL、SETTLED、VOID。SETTLED要求所有有效行open逐条为0；正100与负100净额0但尚未抵销，仍是UNSETTLED。若某有效行已核销或转出但仍有余额，为PARTIAL。开票不改变结算程度。
+图中是单头状态；核销程度另由详情计算：UNSETTLED、PARTIAL、SETTLED、VOID。SETTLED要求所有有效行open逐条为0；正100与负100净额0但尚未抵销，仍是UNSETTLED。未达到全部有效行open为0、且任一有效行settled或transferred非零时，为PARTIAL。例如一行已完全核销、另一行完全未核销，也属于PARTIAL。开票不改变结算程度。
 
 核销单状态POSTED→REVERSED，发票关联与余额批次ACTIVE→REVERSED；历史保留，不能当作记录被删除。
 

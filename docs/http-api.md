@@ -1,6 +1,6 @@
 # HTTP 接口与鉴权
 
-当前已实现的业务接口如下；本服务为后端，不包含操作前端。
+当前已实现的业务接口如下；本服务为后端，不包含操作前端。完整流程与调用示例见[业务与开发手册](handbook/README.md)。
 
 - POST `/api/finance/receivables/create`：ReceivableCreateRequest JSON，成功data为单据ID。
 - GET `/api/finance/receivables/detail?id=...&legalEntityId=...`：包含逐行余额、来源、税率、分类汇总和结算状态。
@@ -76,7 +76,7 @@ POST `/api/finance/invoice-links/eligibility`：`legalEntityId`、`customerId`�
 
 每组按“开票业务组＋amountType＋taxRate”计算：`remainingNetAmount = receivableNetAmount - invoicedNetAmount`，金额均保留原正负方向；`blueAvailableAmount=max(remainingNetAmount,0)`。关联负数归adjustment_link.related_group_id，其他明细归物理业务组。实际收款、抵销去向、转入余额及未核销余额不参与此公式。NULL税率与0税率不同。
 
-逐行`remainingAmount`是该行自身剩余额，不能把多行可用额相加后越过共享分组额度；后续登记必须同时校验行额度和分组额度。负的分组净余额不代表可直接红字开票，红字仍需原发票及原分配的剩余额约束。
+逐行`remainingAmount`是该行自身剩余额，不能把多行可用额相加后越过共享分组额度；登记实现同时校验行额度和分组额度。负的分组净余额不代表可直接红字开票，红字仍需原发票及原分配的剩余额约束。
 
 `invoiceSupported=false`说明该行目前不能贡献开票额度，原因见`blockedReason`。汇率差异默认`EXCHANGE_DIFFERENCE_DISABLED`；仅显式设置 `AR_INVOICE_EXCHANGE_DIFFERENCE_ENABLED=true` 才开启，并仍要求存在汇率依据，否则`EXCHANGE_BASIS_MISSING`。该配置不改变应收余额和核销资格。
 
@@ -112,7 +112,7 @@ POST `/api/finance/receivables/void-upstream`：`requestKey`、`legalEntityId`�
 
 有效核销、余额转入、开票关联或非零占用均阻止作废；须先通过原业务撤销。外部有效调整指定原行时先取消调整；不能扩大原组/价税类型/税率的共享开票缺口。原额、税率、来源及历史分配保留，只将作废行open归零。来源blocked阻止新事件重新生成，不提供隐式恢复或自动解除入口。
 
-事务锁序为来源→单头→有序物理及开票业务组→行，READ_COMMITTED重读依赖；状态、来源拦截、完整前后快照和幂等结果原子提交。此动作不自动撤销收款或外部税务发票。外部通知投递仍待后续任务实现。
+事务锁序为来源→单头→有序物理及开票业务组→行，READ_COMMITTED重读依赖；状态、来源拦截、完整前后快照和幂等结果原子提交。此动作不自动撤销收款或外部税务发票。外部通知已通过同事务outbox及异步派发实现，默认关闭外发，见通知章节。
 
 应收详情每行另返回`adjustment`（无关联为null），包含`relatedGroupId`及可空`originalLineId`。即使`source=null`，关联负数也返回该关系；物理groupId与开票/调整关联组分开表达，不从来源是否存在推断调整关系。
 
@@ -140,9 +140,9 @@ POST `/api/finance/reconciliation/page`，要求`ar:read`；legalEntityId/custom
 
 规则：LINE_SETTLED对照有效正负核销分配；LINE_TRANSFERRED对照有效转入批次负额；LINE_INVOICED对照有效蓝红发票分配；RECEIPT_ALLOCATED对照有效收款核销单；ACCOUNT_BALANCE对照有效批次amount-usedAmount；LOT_USED对照有效余额抵扣使用明细；SETTLEMENT_TOTAL核对原核销单与原分配合计；BALANCE_ALLOCATION_USAGE核对每条余额分配与来源批次金额合计。后两项保留对REVERSED历史结构的检查，前六项仅有效业务影响当前投影。
 
-接口不修改任何余额或流水。审计版本快照、关联范围/结构完整性等进一步检查尚在后续任务中，不能将本报告无差异解释为全部数据正确。
+接口不修改任何余额或流水。审计版本快照、关联范围/结构完整性检查已实现，见下列补充规则；无差异仍不能解释为全部中间审计链、外部系统和全部数据均正确。
 
-对账补充规则：`INVOICE_TOTAL`核对发票单头带符号总额与原始分配合计，含已撤销历史；`INVOICE_RED_EXCESS`以原蓝字分配为对象，storedAmount为有效红字累计绝对金额，expectedAmount为原蓝字分配上限，仅超过上限时报差异。少于上限属于正常部分红冲，不报告。其他关联结构及审计版本检查仍在后续任务中。
+对账补充规则：`INVOICE_TOTAL`核对发票单头带符号总额与原始分配合计，含已撤销历史；`INVOICE_RED_EXCESS`以原蓝字分配为对象，storedAmount为有效红字累计绝对金额，expectedAmount为原蓝字分配上限，仅超过上限时报差异。少于上限属于正常部分红冲，不报告。其他关联结构及审计版本检查见下文。
 
 明细审计规则：LINE_OPEN检查ACTIVE余额恒等式及VOID余额归零；LINE_VOID_OCCUPANCY检查作废行不得有核销、转入或开票占用；LINE_AUDIT_INITIAL检查有效初始化快照存在且原额、税率/计税依据、类型及归属一致；LINE_AUDIT_LATEST检查末次有效变化的版本、状态、全部金额及上述不变属性与当前行一致。审计布尔异常以storedAmount=1、expectedAmount=0表示，不代表货币金额。此处仅检查明细初始化及末次快照，不宣称已验证所有中间事件连续性或所有对象审计。
 

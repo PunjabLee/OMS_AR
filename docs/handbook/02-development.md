@@ -73,7 +73,7 @@ Controller不依赖DAO或Entity；Service接口不暴露Entity；Query必须转�
 | BalanceSettlementServiceImpl | FIFO来源分摊、余额核销及原批次恢复 | BalanceSettlementDao、CustomerBalanceDao、SettlementDao |
 | InvoiceEligibilityServiceImpl | 原组/类型/税率开票容量 | InvoiceEligibilityDao |
 | InvoiceServiceImpl | BLUE/RED预览、登记、详情、撤销 | InvoiceDao、InvoiceEligibilityService |
-| ReceivableVoidServiceImpl | 财务/上游作废与来源blocked | ReceivableVoidDao、ReceivableDao |
+| ReceivableVoidServiceImpl | 财务/上游作废与来源blocked | ReceivableVoidDao、FinanceJournalService |
 | FinanceJournalServiceImpl | 幂等预留/完成、事件与快照、入队 | ReceivableDao、OutboxEnqueueService |
 | LifecycleServiceImpl | 单据视角生命周期分页 | LifecycleDao |
 | SettlementQueryServiceImpl | 核销单和分配/批次使用详情 | SettlementQueryDao |

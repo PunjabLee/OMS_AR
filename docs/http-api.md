@@ -147,3 +147,7 @@ POST `/api/finance/reconciliation/page`，要求`ar:read`；legalEntityId/custom
 明细审计规则：LINE_OPEN检查ACTIVE余额恒等式及VOID余额归零；LINE_VOID_OCCUPANCY检查作废行不得有核销、转入或开票占用；LINE_AUDIT_INITIAL检查有效初始化快照存在且原额、税率/计税依据、类型及归属一致；LINE_AUDIT_LATEST检查末次有效变化的版本、状态、全部金额及上述不变属性与当前行一致。审计布尔异常以storedAmount=1、expectedAmount=0表示，不代表货币金额。此处仅检查明细初始化及末次快照，不宣称已验证所有中间事件连续性或所有对象审计。
 
 关联诊断规则：INVOICE_RELATION检查发票分配与应收范围、类型、税率、正负方向及有效状态；ADJUSTMENT_RELATION检查负数调整与关联组/原正数行的范围、价税属性和有效原行；SETTLEMENT_RELATION检查核销分配双方的范围、方向、目标金额类型及有效状态。有关联负数须同类型抵销，独立负数跨类型仍合法。关系异常以1/0表示，报告对象为当前授权范围的行或分配ID，不返回对方单据快照。
+
+结构补充规则：LINE_PARENT检查明细单头/业务组存在、未逻辑删除、范围一致及有效状态；LINE_SOURCE_MISSING依据有效初始化SOURCE快照发现来源记录缺失或被逻辑删除（直接创建无来源不会误报）；BALANCE_USAGE_RELATION检查使用明细所属核销、分配、来源批次与账户一致；INVOICE_RED_RELATION检查原蓝字、原分配、价税属性及调整指定组/行，原蓝字失效时有效红字报告异常。均为只读1/0结构诊断。
+
+边界：来源和审计缺失检测依赖保留的有效初始化证据；若记录与全部审计证据同时被外部删除，本接口不能凭空还原来源。诊断不是数据库防篡改证明，不校验全部中间事件链，也不替代银行或税务外部对账。

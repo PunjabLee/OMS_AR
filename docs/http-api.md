@@ -115,3 +115,9 @@ POST `/api/finance/receivables/void-upstream`：`requestKey`、`legalEntityId`�
 事务锁序为来源→单头→有序物理及开票业务组→行，READ_COMMITTED重读依赖；状态、来源拦截、完整前后快照和幂等结果原子提交。此动作不自动撤销收款或外部税务发票。外部通知投递仍待后续任务实现。
 
 应收详情每行另返回`adjustment`（无关联为null），包含`relatedGroupId`及可空`originalLineId`。即使`source=null`，关联负数也返回该关系；物理groupId与开票/调整关联组分开表达，不从来源是否存在推断调整关系。
+
+## 应收生命周期
+
+POST `/api/finance/receivables/lifecycle/page`，要求`ar:read`，入参`legalEntityId/documentId/page/size`；页号从1开始，默认20条，最多200条。返回标准分页，按事件ID倒序；生成、核销、开票、撤销、作废等凡涉及该单头或明细的事件均可查询，作废历史不隐藏。
+
+每条事件包含类型、发生/记录时间、操作人、原因、触发对象、关联编号、reverseOfId、schemaVersion及changes。变化包含objectType/objectId、JSON对象格式的beforeSnapshot/deltaSnapshot/afterSnapshot及前后版本，初始化前快照为null。事件采用EXISTS去重计数；只返回当前单头及所属明细的变化，同事件涉及其他应收、收款或账户的快照不会混入。本接口是单据视角，不替代收款/账户/来源对象的专用查询。

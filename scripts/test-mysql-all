@@ -7,6 +7,6 @@ root = Path(__file__).resolve().parent.parent
 settings = dict(line.split('=', 1) for line in (root / '.env').read_text().splitlines() if line and not line.startswith('#'))
 env = dict(os.environ, AR_TEST_PASSWORD=settings['MYSQL_PASSWORD'])
 args = [str(root / 'scripts/mvn-java21'), '-B', '-Dmaven.repo.local=work/m2', '-pl', 'oms-ar-server', '-Dtest=*RealTest']
-for domain in ['schema', 'create', 'receipt', 'settlement', 'offset', 'balance', 'balance-settlement', 'invoice-schema', 'exchange', 'invoice-eligibility', 'invoice', 'source-guard', 'void', 'http']:
+for domain in ['schema', 'create', 'receipt', 'settlement', 'offset', 'balance', 'balance-settlement', 'invoice-schema', 'exchange', 'invoice-eligibility', 'invoice', 'source-guard', 'void', 'lifecycle', 'http']:
     args.extend([f'-Dar.{domain}.real=true', f'-Dar.{domain}.real.commit=true'])
 raise SystemExit(subprocess.call(args + ['test'], cwd=root, env=env))

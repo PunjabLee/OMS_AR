@@ -115,6 +115,10 @@ class ReceivableHttpRealTest {
    assertThat(post(client,root+"/void",voidBody).at("/data/eventId").asLong()).isEqualTo(voidResult.at("/data/eventId").asLong());
    var voidDetail=client.send(HttpRequest.newBuilder(URI.create(root+"/detail?id="+id+"&legalEntityId=1")).header("Authorization","Bearer "+TOKEN).GET().build(),HttpResponse.BodyHandlers.ofString());
    assertThat(voidDetail.statusCode()).isEqualTo(200);assertThat(json.readTree(voidDetail.body()).at("/data/document/voidReason").asText()).isEqualTo("http void");assertThat(json.readTree(voidDetail.body()).at("/data/settlementStatus").asText()).isEqualTo("VOID");
+   var lifecycle=post(client,root+"/lifecycle/page",Map.of("legalEntityId",1,"documentId",id,"page",1,"size",200));
+   assertThat(lifecycle.at("/data/records/0/eventType").asText()).isEqualTo("RECEIVABLE_VOIDED");
+   var eventTypes=new java.util.HashSet<String>();for(var event:lifecycle.at("/data/records"))eventTypes.add(event.get("eventType").asText());
+   assertThat(eventTypes).contains("CREATED","RECEIPT_SETTLED","OFFSET_SETTLED","BALANCE_SETTLED","INVOICE_REGISTERED","INVOICE_REVERSED");
    String canceledSource=UUID.randomUUID().toString();
    var upstream=post(client,root+"/void-upstream",Map.of("requestKey",UUID.randomUUID().toString(),"legalEntityId",1,"sourceSystem","WMS","sources",List.of(Map.of("sourceType","OUTBOUND","sourceId",canceledSource)),"reason","cancel before delivery"));
    assertThat(upstream.at("/data/lineIds").size()).isZero();

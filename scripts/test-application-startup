@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+"""Verify the packaged app against one exclusively owned temporary MySQL schema."""
+import json
+import os
+import re
+import secrets
+import subprocess
+import time
+import uuid
+from datetime import date
+from pathlib import Path
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
+from ar_local import read_env, DEFAULT_JDK
+
+ROOT = Path(__file__).resolve().parent.parent
+WORK = ROOT / 'work'
+
+def admin(sql):
+    result = subprocess.run(['docker', 'exec', '-i', 'oms-ar-mysql-1', 'sh', '-c', 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot -N -B'], input=sql, text=True, capture_output=True)
+    if result.returncode:
+        raise RuntimeError('Temporary startup database administration failed')
+    return result.stdout.strip()
+
+def stop(process):
+    if process is not None and process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=10)
+
+def ready(process, log):
+    deadline = time.monotonic() + 45
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise AssertionError('Application exited before readiness; inspect the local startup log')
+        match = re.search(r'Tomcat started on port (\d+)', log.read_text())
+        if match:
+            return int(match.group(1))
+        time.sleep(0.1)
+    raise AssertionError('Application readiness timed out')
+
+def main():
+    WORK.mkdir(exist_ok=True)
+    database = 'oms_ar_startup_' + uuid.uuid4().hex[:12]
+    settings = dict(read_env(ROOT / '.env'), **os.environ)
+    token = secrets.token_urlsafe(36)
+    password = settings.get('DB_PASSWORD', settings.get('MYSQL_PASSWORD', ''))
+    if not password:
+        raise ValueError('Local database password is required')
+    env = {k: v for k, v in os.environ.items() if not k.startswith(('DB_', 'AR_', 'SPRING_', 'SERVER_'))}
+    env.update(DB_URL=f'jdbc:mysql://127.0.0.1:13306/{database}', DB_USERNAME='oms_ar', DB_PASSWORD=password,
+               AR_JDK_HOME=settings.get('AR_JDK_HOME', DEFAULT_JDK), AR_API_TOKEN=token, AR_API_USER='startup-verification',
+               AR_LEGAL_ENTITIES='1', AR_PERMISSIONS='ar:create,ar:read,ar:receipt:create,ar:settle,ar:reverse,ar:invoice:write,ar:void,ar:outbox:read,ar:outbox:retry',
+               SERVER_ADDRESS='127.0.0.1', SERVER_PORT='0', AR_OUTBOX_ENABLED='false', AR_OUTBOX_SCHEDULING_ENABLED='false',
+               AR_DATABASE_VERIFY_SCHEMA='true', SPRING_FLYWAY_ENABLED='true', SPRING_PROFILES_ACTIVE='')
+    process = None
+    logs = []
+    created = False
+    def start(name):
+        log = WORK / f'startup-{name}.log'
+        logs.append(log)
+        with log.open('w') as output:
+            proc = subprocess.Popen([str(ROOT / 'scripts/run-local')], cwd=ROOT, env=env, stdout=output, stderr=subprocess.STDOUT)
+        return proc, log
+    def sql(statement):
+        return admin(f'USE `{database}`; ' + statement)
+    def api(port, path, body=None, status=200, authenticated=True):
+        headers = {'Content-Type': 'application/json'}
+        if authenticated:
+            headers['Authorization'] = 'Bearer ' + token
+        request = Request(f'http://127.0.0.1:{port}/api/finance/{path}', data=None if body is None else json.dumps(body).encode(), headers=headers)
+        try:
+            with urlopen(request, timeout=10) as response:
+                actual, payload = response.status, json.load(response)
+        except HTTPError as error:
+            actual, payload = error.code, json.load(error)
+        assert actual == status, f'Unexpected HTTP status {actual} for {path}'
+        if status == 200:
+            assert payload['code'] == 0, f'Business operation failed for {path}'
+        return payload.get('data')
+    def key():
+        return str(uuid.uuid4())
+    report = {'checks': [], 'externalNotificationsSent': False}
+    try:
+        admin(f'CREATE DATABASE `{database}` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_cs;')
+        created = True
+        admin(f"GRANT ALL PRIVILEGES ON `{database}`.* TO 'oms_ar'@'%';")
+        process, log = start('cold')
+        port = ready(process, log)
+        assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '12'
+        report['checks'].append('cold startup: automatic 12-version migration and schema validation')
+        api(port, 'receivables/detail?id=1&legalEntityId=1', status=401, authenticated=False)
+        today = date.today().isoformat()
+        lines = []
+        for group, amount, tax in [('A', 100, 13), ('B', 200, 26)]:
+            lines += [{'groupKey': group, 'amountType': 'PRINCIPAL', 'amount': amount},
+                      {'groupKey': group, 'amountType': 'OUTPUT_TAX', 'amount': tax, 'taxRate': 0.13, 'taxBaseAmount': amount}]
+        request = dict(requestKey=key(), customerId=1, legalEntityId=1, currency='CNY', businessType='SERVICE', businessDate=today, reason='startup verification', lines=lines)
+        document = api(port, 'receivables/create', request)
+        assert api(port, 'receivables/create', request) == document
+        api(port, f'receivables/detail?id={document}&legalEntityId=2', status=403)
+        detail = api(port, f'receivables/detail?id={document}&legalEntityId=1')
+        groups = list(dict.fromkeys(line['groupId'] for line in detail['lines']))
+        assert detail['principal']['openAmount'] == 300 and detail['outputTax']['openAmount'] == 39
+        receipt = api(port, 'receipts/create', dict(requestKey=key(), customerId=1, legalEntityId=1, currency='CNY', amount=120, receivedDate=today, sourceSystem='STARTUP', sourceId=key(), sourceNo='STARTUP'))
+        preview_input = dict(legalEntityId=1, receiptId=receipt, amount=120, groupIds=groups, strategy='GROUP_TAX_FIRST')
+        preview = api(port, 'settlements/preview', preview_input)
+        assert [(x['amountType'], x['amount']) for x in preview['allocations']] == [('OUTPUT_TAX', 13), ('PRINCIPAL', 100), ('OUTPUT_TAX', 7)]
+        settlement = api(port, 'settlements/confirm', dict(requestKey=key(), preview=preview_input, expectedFingerprint=preview['fingerprint'], reason='startup settlement'))
+        after = api(port, f'receivables/detail?id={document}&legalEntityId=1')
+        assert after['principal']['settledAmount'] == 100 and after['outputTax']['settledAmount'] == 20
+        api(port, 'settlements/reverse', dict(requestKey=key(), legalEntityId=1, settlementId=settlement, reason='startup reversal'))
+        invoice_lines = [dict(invoiceLineId='1', receivableLineId=detail['lines'][0]['id'], amount=100),
+                         dict(invoiceLineId='2', receivableLineId=detail['lines'][1]['id'], amount=13, taxRate=0.13)]
+        invoice_input = dict(legalEntityId=1, customerId=1, currency='CNY', kind='BLUE', totalAmount=113, lines=invoice_lines)
+        invoice_preview = api(port, 'invoice-links/preview', invoice_input)
+        invoice = api(port, 'invoice-links/register', dict(requestKey=key(), sourceSystem='STARTUP', sourceId=key(), invoiceNo='STARTUP', invoiceDate=today, preview=invoice_input, expectedFingerprint=invoice_preview['fingerprint'], reason='startup invoice'))
+        void = dict(requestKey=key(), legalEntityId=1, documentId=document, reason='startup void')
+        api(port, 'receivables/void', void, status=409)
+        api(port, 'invoice-links/reverse', dict(requestKey=key(), legalEntityId=1, invoiceId=invoice, reason='startup invoice reversal'))
+        api(port, 'receivables/void', void)
+        assert api(port, f'receivables/detail?id={document}&legalEntityId=1')['document']['status'] == 'VOID'
+        lifecycle = api(port, 'receivables/lifecycle/page', dict(legalEntityId=1, documentId=document, size=100))
+        assert {'CREATED', 'RECEIPT_SETTLED', 'SETTLEMENT_REVERSED', 'INVOICE_REGISTERED', 'INVOICE_REVERSED', 'RECEIVABLE_VOIDED'} <= {r['eventType'] for r in lifecycle['records']}
+        assert api(port, 'reconciliation/page', dict(legalEntityId=1, customerId=1, currency='CNY'))['total'] == 0
+        report['checks'].append('authenticated HTTP: idempotent creation, group tax-first settlement/reversal, invoice/reversal, void, lifecycle and reconciliation')
+        notifications = api(port, 'notifications/page', dict(legalEntityId=1, size=100))
+        assert notifications['total'] > 0 and all(r['status'] == 'PENDING' and r['attemptCount'] == 0 for r in notifications['records'])
+        assert sql('SELECT COUNT(*) FROM oms_ar_outbox WHERE next_attempt_at>NOW(6);') == '0'
+        notification = notifications['records'][0]['id']
+        sql(f"UPDATE oms_ar_outbox SET status='DEAD',attempt_count=3,last_error='HTTP_503',version=version+1 WHERE id={notification};")
+        notification_detail = api(port, f'notifications/detail?id={notification}&legalEntityId=1')
+        retry_request = dict(requestKey=key(), legalEntityId=1, outboxId=notification, expectedVersion=notification_detail['notification']['version'], reason='startup retry')
+        audit = api(port, 'notifications/retry', retry_request)
+        assert api(port, 'notifications/retry', retry_request) == audit
+        assert api(port, 'notifications/retries/page', dict(legalEntityId=1, outboxId=notification))['total'] == 1
+        report['checks'].append('notifications disabled: persisted ready queue, manual retry and immutable retry history')
+        stop(process)
+        process, log = start('restart')
+        port = ready(process, log)
+        assert api(port, f'receivables/detail?id={document}&legalEntityId=1')['document']['status'] == 'VOID'
+        assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '12'
+        report['checks'].append('restart preserves business data and migration history')
+        stop(process)
+        sql('ALTER TABLE oms_ar_document MODIFY doc_no VARCHAR(65) NOT NULL;')
+        process, log = start('drift-rejected')
+        assert process.wait(timeout=45) != 0
+        text = log.read_text()
+        assert '数据库结构与正式迁移基准不一致: oms_ar_document' in text
+        assert 'Tomcat started on port' not in text
+        report['checks'].append('schema drift aborts startup before HTTP readiness')
+        for log in logs:
+            text = log.read_text()
+            assert token not in text and password not in text, 'Credential appeared in startup log'
+    finally:
+        stop(process)
+        if created:
+            admin(f"REVOKE ALL PRIVILEGES ON `{database}`.* FROM 'oms_ar'@'%'; DROP DATABASE `{database}`;")
+    report['temporaryDatabaseRemoved'] = True
+    (WORK / 'startup-smoke-result.json').write_text(json.dumps(report, indent=2, ensure_ascii=False) + '\n')
+    print('Packaged application startup verification passed: 5 groups of checks; temporary database removed.')
+
+if __name__ == '__main__':
+    main()

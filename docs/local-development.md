@@ -8,6 +8,6 @@
 
 启动：`docker compose up -d mysql`。查看状态：`docker compose ps`。停止：`docker compose stop mysql`。数据保存在本项目的命名卷中，常规停止不会清除。不要用删除卷的命令作为普通停止方式。
 
-应用配置对应 DB_URL=jdbc:mysql://127.0.0.1:13306/oms_ar、DB_USERNAME=oms_ar，DB_PASSWORD 使用.env内MYSQL_PASSWORD值；应用尚未实现自动加载.env，运行时需显式注入环境变量。无Nacos配置。
+应用配置对应 DB_URL=jdbc:mysql://127.0.0.1:13306/oms_ar、DB_USERNAME=oms_ar，DB_PASSWORD 使用.env内MYSQL_PASSWORD值；scripts/run-local现已安全加载.env，进程环境优先，直接java启动时仍需显式注入环境变量。无Nacos配置。
 
-正式迁移已接入，启动时自动执行classpath:db/migration；无历史非空库不会自动接管。迁移规则和专属临时库测试见[数据库版本迁移](database-migrations.md)。应用启动脚本及完整启动验收仍在后续任务完成。
+正式迁移已接入，启动时自动执行classpath:db/migration；无历史非空库不会自动接管。迁移规则和专属临时库测试见[数据库版本迁移](database-migrations.md)。启动、配置和统一验证命令见[项目README](../README.md)。打包应用冷启动、重启保留数据及结构异常拒绝启动已实际验证。

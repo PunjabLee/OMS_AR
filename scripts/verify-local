@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""Build and verify all local gates, using only the dedicated test databases."""
+import subprocess
+from pathlib import Path
+
+root = Path(__file__).resolve().parent.parent
+# Create, never clear, the isolated business-fixture database.
+result = subprocess.run(['docker', 'exec', '-i', 'oms-ar-mysql-1', 'sh', '-c', 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot -N -B'],
+                        input="CREATE DATABASE IF NOT EXISTS oms_ar_test CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_cs; GRANT ALL PRIVILEGES ON oms_ar_test.* TO 'oms_ar'@'%';", text=True, capture_output=True)
+if result.returncode:
+    raise SystemExit('Local MySQL test preparation failed; start the project Docker service first.')
+commands = [
+    ['python3', '-m', 'unittest', 'discover', '-s', 'scripts/tests', '-v'],
+    ['./scripts/mvn-java21', '-B', '-Dmaven.repo.local=work/m2', 'package'],
+    ['./scripts/test-mysql-all'],
+    ['./scripts/test-mysql-migration'],
+    ['./scripts/test-application-startup'],
+]
+for index, command in enumerate(commands, 1):
+    print(f'Verification gate {index}/{len(commands)}', flush=True)
+    result = subprocess.run(command, cwd=root)
+    if result.returncode:
+        raise SystemExit(result.returncode)
+print('All local verification gates passed.')

@@ -10,7 +10,7 @@
 - 数据库连接仍由DB_URL/DB_USERNAME/DB_PASSWORD提供，无默认密码，无Nacos。通知派发仍默认关闭。
 - MySQL DDL存在隐式提交。失败迁移可能已留下部分表结构，必须先核查数据库、备份和实际失败语句，再制定修复方案，不能通过自动重跑或直接修改历史校验和掩盖问题。
 
-Flyway历史文件校验使用迁移校验和，能够发现已执行文件变化；它不等同于对现存表结构进行逐列检查，不能据此宣称手工ALTER已被检测。该边界参照[Flyway Validate说明](https://documentation.red-gate.com/flyway/reference/commands/validate)。实际表结构校验已补齐，见下节；完整应用启动验收继续在下一任务完成。
+Flyway历史文件校验使用迁移校验和，能够发现已执行文件变化；它不等同于对现存表结构进行逐列检查，不能据此宣称手工ALTER已被检测。该边界参照[Flyway Validate说明](https://documentation.red-gate.com/flyway/reference/commands/validate)。实际表结构校验已补齐，见下节；打包应用的冷启动、重启和结构异常拒绝启动均已完成本机验收。
 
 ## 开发与测试库
 
@@ -29,4 +29,4 @@ Flyway历史文件校验使用迁移校验和，能够发现已执行文件变�
 
 通过./scripts/test-mysql-migration --export-contract可从本次创建的全新临时库重新生成基准，生成结果必须与新增正式迁移一起审查提交；禁止用已有漂移数据库更新基准来绕过失败。默认迁移测试包含7个结构用例，验证正常基准、自增计数不误报、列/索引/外键/CHECK变化、表增删和迁移版本不匹配。
 
-该校验在启动时执行，不是持续监控；不校验业务数据、权限、触发器或存储过程。历史业务实库测试因有意修改约束，使用仅位于src/test/resources的配置关闭该校验；此配置不进入可执行JAR。正式启动流程和HTTP业务验收仍需后续验证。
+该校验在启动时执行，不是持续监控；不校验业务数据、权限、触发器或存储过程。历史业务实库测试因有意修改约束，使用仅位于src/test/resources的配置关闭该校验；此配置不进入可执行JAR。scripts/test-application-startup已用真实打包应用验证初始化顺序、HTTP业务流程和结构异常时拒绝开放HTTP服务；统一入口为scripts/verify-local。

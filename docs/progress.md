@@ -236,3 +236,10 @@ Ruling: 入队精度回归发现MySQL JSON将9999999999999999.12345678舍入为1
 验证：独立随机临时库首轮4个场景因缺失迁移红灯，正式资源加入后5项全部通过（work/migration-green.log），覆盖空库/重复执行、V6升级保留数据、历史文件校验和不一致、无历史非空库拒绝、MySQL部分DDL失败并阻止自动重跑。专属脚本结束撤销本次临时权限并删除本次库，现场只读核实残留0。完整业务实库201项通过、5项专属迁移测试门禁跳过（work/migration-final-real.log）；默认36项通过/206项跳过，package成功（work/migration-final-package.log）。检查可执行JAR含12个迁移文件及Flyway core/mysql11.7.2。git diff --check通过。
 
 不将Flyway校验和等同于实际表结构漂移检测。13b仍需结构完整性证据、正式自动迁移后的应用启动/HTTP验收、安全加载.env脚本和交付README；13c最终全需求矩阵与全分支评审仍未完成。
+
+
+任务13b1完成（2026-11-02）：结构基准schema-contract.json由正式迁移空库生成，覆盖21张业务表及MySQL8.0.42/迁移012。SchemaContractVerifier只读SHOW CREATE TABLE，SHA-256比较列/索引/外键/CHECK与表选项，仅排除自增计数和换行差异；增加/删除业务表、迁移版本或数据库补丁版本不一致均拒绝。Spring初始化Bean明确依赖数据库初始化，默认启用；历史夹具测试专用关闭配置不进入产物。
+
+验证：6类漂移用例先红灯，再实现；7项结构测试全绿（含CHECK不执行、正常自增不误报），联合5项迁移共12项通过（work/schema-contract-green.log）。默认资源测试验证全部业务表均有摘要、启动方法具备迁移依赖。完整业务实库201项通过/12项专属门禁跳过（work/schema-contract-final-real.log）；默认37项通过/213项门禁跳过且package成功（work/schema-contract-final-package.log）。检查产物包含结构基准、不包含测试pre关闭配置。临时库现场只读核实残留0；git diff --check通过。
+
+边界：这里只读结构校验，不验证业务数据、权限、触发器/存储过程，也不持续监控运行后的DDL。13b2仍需实际应用初始化/启动成功与失败路径、关键HTTP业务流程、安全.env启动脚本和README；13c完整需求审计和全分支评审仍未完成。

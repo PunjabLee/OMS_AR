@@ -1,0 +1,27 @@
+{
+  "mysqlVersion": "8.0.42",
+  "migrationVersion": "012",
+  "tableHashes": {
+    "oms_ar_adjustment_link": "6071600de4cba07a25bce02bc1ddaa61aba3b1d6ef46c8d53c1d0e72a70e00c4",
+    "oms_ar_balance_lot": "517cf13ed5b4075b2ccbc563d76e255d20ce6d77a6263df6da39bc0d924b69eb",
+    "oms_ar_balance_settlement": "b7d08cd300abb3386fe69b7138a5bcdd6ee276d4c7e37c498df7149f8e9deff2",
+    "oms_ar_balance_usage": "1c528e8f6f22cc3ba3ec32b2720314913833fa45d304f77da64bace15e4e8edb",
+    "oms_ar_business_group": "3b863584b9950787bb307656f597c5d0154fe31985afea2ad4a1aa26279374c4",
+    "oms_ar_customer_account": "d4f1e564e37743266bcefc932c89c42a1f2b06023a505df857a53c7417d13d7f",
+    "oms_ar_document": "b3bad19440b554878d1d2113e05e967228e3aa8db96c06ec5c10834c9c4973b6",
+    "oms_ar_exchange_basis": "f3901fb7939410db343b78f6ee1d8add097fdef7602e250bac60c480ea30025d",
+    "oms_ar_invoice": "f38096ffdfd9090aefecefd9ac6d3231f1eccc670257079f199903abaa36a1fb",
+    "oms_ar_invoice_allocation": "3902c4fdd13c2a993eafc341601edd88b5c0c8b9852f50347b7981599eaf560a",
+    "oms_ar_lifecycle_change": "ffff8bfdb02af548cd728b34dafe5b44c8ff3e2952990264727f506c1756ffd8",
+    "oms_ar_lifecycle_event": "252674ac9eeed05eaeca9213e102d58b175bc3b5d7a9146eb5a5383560398e9b",
+    "oms_ar_line": "27561cb8e8d8659e7ed8bd7bbf395f5072f140fbc8c8911d3c0e9fc32db2c1b2",
+    "oms_ar_line_source": "23dc49a09413d1202d48b54ee136c0911b114a62531e821802e683d10151d970",
+    "oms_ar_operation_request": "2f03c9013e11e230441acda43d591dd4601ac9d85aecba0fb56e0f218b8432ba",
+    "oms_ar_outbox": "f58b41ff633ab7fb2e3ba0d5314099cda409cf1ad018bfedb15e21719f836a29",
+    "oms_ar_outbox_retry": "c0190f6e1ba21a82b5ebea6eeef13a0fa408d20686b9d6cc94a0f58408a4b9bc",
+    "oms_ar_receipt": "be7cf9fcec4fda037402473656709b49a9eb8bcc8305c1750275f43fa86ea756",
+    "oms_ar_settlement": "6e61ea1b32f25f2d7d37b2ca29c46e43c16d1e172037a96ba6683018f8112d86",
+    "oms_ar_settlement_allocation": "af45d7b2c13688bf070e25514983e7af66150ee958274e0ed082223abff62beb",
+    "oms_ar_source_guard": "e803b330ad2588a446336362c3b3fc0e15bf5be6f9836fcb50be195af9cc7e7a"
+  }
+}

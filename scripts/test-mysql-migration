@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Create exclusively owned temporary schemas for migration tests, and remove only those schemas."""
 import os
+import sys
 import subprocess
 import uuid
 from pathlib import Path
 root = Path(__file__).resolve().parent.parent
 settings = dict(line.split('=', 1) for line in (root / '.env').read_text().splitlines() if line and not line.startswith('#'))
 prefix = 'oms_ar_migration_' + uuid.uuid4().hex[:12]
-databases = [prefix + '_' + suffix for suffix in ['fresh', 'upgrade', 'tamper', 'unmanaged', 'failure']]
+databases = [prefix + '_' + suffix for suffix in ['fresh', 'upgrade', 'tamper', 'unmanaged', 'failure'] + ['contract_' + name for name in ['baseline', 'column', 'index', 'foreignkey', 'check', 'table', 'version']]]
 def admin(sql):
     result = subprocess.run(['docker', 'exec', '-i', 'oms-ar-mysql-1', 'sh', '-c', 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot -N -B'], input=sql, text=True, capture_output=True)
     if result.returncode:
@@ -19,7 +20,11 @@ try:
         created.append(database)
         admin(f"GRANT ALL PRIVILEGES ON `{database}`.* TO 'oms_ar'@'%';")
     env = dict(os.environ, AR_TEST_PASSWORD=settings['MYSQL_PASSWORD'], AR_MIGRATION_DATABASE_PREFIX=prefix)
-    result = subprocess.call([str(root / 'scripts/mvn-java21'), '-B', '-Dmaven.repo.local=work/m2', '-pl', 'oms-ar-server', '-Dtest=MigrationRealTest', '-Dar.migration.real=true', '-Dar.migration.real.commit=true', 'test'], cwd=root, env=env)
+    export = sys.argv[1:] == ['--export-contract']
+    if sys.argv[1:] and not export:
+        raise ValueError('Only --export-contract is supported')
+    selection = 'SchemaContractRealTest#baseline' if export else 'MigrationRealTest,SchemaContractRealTest'
+    result = subprocess.call([str(root / 'scripts/mvn-java21'), '-B', '-Dmaven.repo.local=work/m2', '-pl', 'oms-ar-server', f'-Dtest={selection}', '-Dar.schema-contract.real=true', '-Dar.schema-contract.real.commit=true', f'-Dar.schema.contract.export={str(export).lower()}', '-Dar.migration.real=true', '-Dar.migration.real.commit=true', 'test'], cwd=root, env=env)
 finally:
     for database in created:
         admin(f"REVOKE ALL PRIVILEGES ON `{database}`.* FROM 'oms_ar'@'%'; DROP DATABASE `{database}`;")

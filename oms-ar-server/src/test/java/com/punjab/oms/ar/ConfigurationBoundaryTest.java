@@ -15,6 +15,7 @@ class ConfigurationBoundaryTest {
   assertThat(config.getProperty("spring.datasource.password")).isEqualTo("${DB_PASSWORD}");
   assertThat(config.getProperty("spring.datasource.url")).isEqualTo("${DB_URL}");
   assertThat(config.getProperty("spring.config.import")).isNull();
+  assertThat(config.getProperty("ar.database.verify-schema")).isEqualTo(true);
   assertThat(config.getProperty("spring.flyway.enabled")).isEqualTo(true);
   assertThat(config.getProperty("spring.flyway.baseline-on-migrate")).isEqualTo(false);
   assertThat(config.getProperty("spring.flyway.clean-disabled")).isEqualTo(true);

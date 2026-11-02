@@ -66,3 +66,7 @@ line 建 document_id/line_no 唯一索引、group_id/status/id 查询索引；do
 创建幂等重放先返回原记录；新请求按键排序，在所有业务组锁之前初始化并锁定来源身份。被标记blocked的来源拒绝新事件重新生成；未blocked不代替原有事件/输出唯一键，也不禁止上游合法的不同事件。初始化身份快照与应收创建同事务。来源锁记录不删除，不提供自行解除拦截入口。
 
 任务9b已实现财务及上游作废设置blocked、权限和生命周期事件，包含迟到生成与取消竞争验证；接口边界见http-api.md。
+
+## 通知存储基础（V011）
+
+outbox保存事件ID、主体、逻辑目的地及JSON payload，事件/目的地唯一。状态为PENDING/PROCESSING/RETRY/SENT/DEAD；attempt_count、next_attempt_at、lease_token/lease_until、sent_time、last_error和version属于可变投递运行状态。只有PROCESSING有租约，只有SENT有sent_time；事件外键保留来源。payload不可变要求由后续服务保证，DDL不宣称已经实现派发或重试。当前仅存储基础完成，业务事务入队与后台投递仍待实现。

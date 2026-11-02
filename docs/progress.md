@@ -181,3 +181,9 @@ Ruling: 来源无行号是独立的单据级槽，NULL与空字符串严格区�
 验证：三项坏数据场景先红后绿；新增先撤销RED再撤销BLUE后对账无误报，现有余额反核销再撤销转入用例覆盖历史批次合法性。最终159项实库/HTTP通过（work/structure-final-real.log），默认26项通过/159项门禁跳过（work/structure-final-default.log）；git diff --check通过。独立评审review_balance_spend无阻断问题，追加建议已落实或由现有用例覆盖。
 
 对账子计划11a/11b已按明确规则完成；边界已写HTTP说明：依赖保留的审计证据，不宣称所有中间事件连续性或数据库防篡改证明，也不是外部银行/税务对账。下一阶段为outbox事务入队与可重试投递、正式版本迁移、本机启动验收及最终全分支审查。整体目标仍在进行中。
+
+任务12a完成（2026-11-02）：通知outbox子计划及V011存储约束。事件/目的地唯一、事件外键、主体与计数约束、五种状态、处理租约成对且只在PROCESSING、发送时间仅SENT；ready/lease/scope索引为后续领取与运营准备。尚未修改业务事务，不会实际发送通知。
+
+验证：4项初始测试因表不存在失败；建表后数据库正确拒绝非法状态，但Spring将CHECK错误归为UncategorizedSQLException，测试初版DataIntegrityViolationException假设错误，改为DataAccessException并精确断言MySQL错误码3819。最终163项实库/HTTP通过（work/outbox-schema-final-real.log），默认26项通过/163项门禁跳过（work/outbox-schema-final-default.log）；git diff --check通过。未把表结构视为完整通知功能。
+
+下一步12b：显式主体传播、创建与FinanceJournal统一事务入队、不可变payload及故障回滚；12c：配置固定接收端、后台租约领取、事务外HTTP、重试/DEAD/人工重试查询与本机模拟验证。随后正式迁移与启动、最终验收仍待完成。

@@ -6,7 +6,7 @@ import java.time.LocalDate;
 public record ReceivableResponse(Document document,String settlementStatus,List<Line> lines,Amounts principal,Amounts outputTax){
  public ReceivableResponse{lines=List.copyOf(lines);}
  /** 单据摘要。 @author Punjab */
- public record Document(Long id,String docNo,Long customerId,Long legalEntityId,String currency,String businessType,String status,LocalDate businessDate,LocalDate dueDate){}
+ public record Document(Long id,String docNo,Long customerId,Long legalEntityId,String currency,String businessType,String status,LocalDate businessDate,LocalDate dueDate,Long version,String generationMode,String voidReason,String voidedBy,java.time.LocalDateTime voidedTime){}
  /** 明细。 @author Punjab */
  public record Line(Long id,Long groupId,Integer lineNo,String amountType,String status,BigDecimal receivableAmount,BigDecimal settledAmount,BigDecimal transferredAmount,BigDecimal openAmount,BigDecimal invoicedAmount,BigDecimal taxRate,BigDecimal taxBaseAmount,Source source,Long version,ExchangeBasis exchangeBasis){}
  /** 来源。 @author Punjab */

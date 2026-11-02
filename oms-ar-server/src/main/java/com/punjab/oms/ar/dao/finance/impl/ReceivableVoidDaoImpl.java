@@ -1,0 +1,23 @@
+package com.punjab.oms.ar.dao.finance.impl;
+import com.punjab.oms.ar.dao.finance.ReceivableVoidDao;import com.punjab.oms.ar.domain.entity.finance.*;import com.punjab.oms.ar.mapper.finance.*;import com.punjab.oms.ar.domain.bo.finance.InvoiceEligibilityQueryBO;
+import com.baomidou.mybatisplus.extension.repository.CrudRepository;import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;import org.springframework.stereotype.Repository;import lombok.RequiredArgsConstructor;import java.util.List;
+/** 来源、单头、组、行固定锁序，不在DAO开启事务。 @author Punjab */
+@Repository @RequiredArgsConstructor public class ReceivableVoidDaoImpl extends CrudRepository<ArDocumentMapper,ArDocument> implements ReceivableVoidDao {
+ private final ReceivableVoidMapper lines;private final ArSourceMapper sources;private final ArSourceGuardMapper guards;private final ArGroupMapper groups;private final ArAdjustmentLinkMapper links;private final InvoiceEligibilityMapper eligibility;private final ArChangeMapper changes;
+ public ArDocument document(Long id,Long scope,boolean lock){var q=new LambdaQueryWrapper<ArDocument>().eq(ArDocument::getId,id).eq(ArDocument::getLegalEntityId,scope).eq(ArDocument::getDeleteStatus,false);if(lock)q.last("FOR UPDATE");return baseMapper.selectOne(q);}
+ public List<ArLine> lines(Long id){return lines.selectList(new LambdaQueryWrapper<ArLine>().eq(ArLine::getDocumentId,id).eq(ArLine::getDeleteStatus,false).orderByAsc(ArLine::getId));}
+ public List<ArSource> sources(List<Long> ids){if(ids.isEmpty())return List.of();return sources.selectList(new LambdaQueryWrapper<ArSource>().in(ArSource::getLineId,ids).eq(ArSource::getDeleteStatus,false));}
+ public boolean initializeGuard(ArSourceGuard g){return guards.initialize(g)==1;}
+ public ArSourceGuard lockGuard(Long scope,String key){return guards.selectOne(new LambdaQueryWrapper<ArSourceGuard>().eq(ArSourceGuard::getLegalEntityId,scope).eq(ArSourceGuard::getSourceKey,key).last("FOR UPDATE"));}
+ public boolean blockGuard(ArSourceGuard g,Long v){return guards.update(null,new LambdaUpdateWrapper<ArSourceGuard>().eq(ArSourceGuard::getId,g.getId()).eq(ArSourceGuard::getVersion,v).eq(ArSourceGuard::getDeleteStatus,false).set(ArSourceGuard::getBlocked,true).set(ArSourceGuard::getVersion,g.getVersion()).set(ArSourceGuard::getUpdatedBy,g.getUpdatedBy()).set(ArSourceGuard::getUpdatedTime,g.getUpdatedTime()))==1;}
+ public List<ArLine> sourceLines(ArSourceGuard g){return lines.sourceLines(g);}
+ public ArGroup lockGroup(Long id,Long scope){return groups.selectOne(new LambdaQueryWrapper<ArGroup>().eq(ArGroup::getId,id).eq(ArGroup::getLegalEntityId,scope).eq(ArGroup::getDeleteStatus,false).last("FOR UPDATE"));}
+ public ArAdjustmentLink adjustment(Long id){return links.selectOne(new LambdaQueryWrapper<ArAdjustmentLink>().eq(ArAdjustmentLink::getLineId,id).eq(ArAdjustmentLink::getDeleteStatus,false));}
+ public ArLine lockLine(Long id){return lines.selectOne(new LambdaQueryWrapper<ArLine>().eq(ArLine::getId,id).eq(ArLine::getDeleteStatus,false).last("FOR UPDATE"));}
+ public long dependencies(Long id){return lines.settlements(id)+lines.invoices(id)+lines.lots(id);}
+ public List<ArLine> dependents(Long id){return lines.dependents(id);}
+ public List<ArInvoiceEligibilityLine> invoiceGroup(ArGroup g){return eligibility.lines(new InvoiceEligibilityQueryBO(g.getLegalEntityId(),g.getCustomerId(),g.getCurrency(),List.of(g.getId())));}
+ public boolean voidLine(ArLine l,Long v){return lines.update(null,new LambdaUpdateWrapper<ArLine>().eq(ArLine::getId,l.getId()).eq(ArLine::getVersion,v).eq(ArLine::getStatus,"ACTIVE").eq(ArLine::getDeleteStatus,false).set(ArLine::getStatus,"VOID").set(ArLine::getOpenAmount,l.getOpenAmount()).set(ArLine::getVersion,l.getVersion()).set(ArLine::getUpdatedBy,l.getUpdatedBy()).set(ArLine::getUpdatedTime,l.getUpdatedTime()))==1;}
+ public boolean updateDocument(ArDocument d,Long v){return baseMapper.update(null,new LambdaUpdateWrapper<ArDocument>().eq(ArDocument::getId,d.getId()).eq(ArDocument::getVersion,v).eq(ArDocument::getDeleteStatus,false).set(ArDocument::getStatus,d.getStatus()).set(ArDocument::getVersion,d.getVersion()).set(ArDocument::getVoidReason,d.getVoidReason()).set(ArDocument::getVoidedBy,d.getVoidedBy()).set(ArDocument::getVoidedTime,d.getVoidedTime()).set(ArDocument::getUpdatedBy,d.getUpdatedBy()).set(ArDocument::getUpdatedTime,d.getUpdatedTime()))==1;}
+ public List<ArChange> changes(Long eventId){return changes.selectList(new LambdaQueryWrapper<ArChange>().eq(ArChange::getEventId,eventId).eq(ArChange::getDeleteStatus,false).orderByAsc(ArChange::getId));}
+}

@@ -1,6 +1,6 @@
 # HTTP 接口与鉴权
 
-当前实现：创建、详情、分页。其余业务仍在建设，不能调用尚未实现的核销或作废动作。
+当前已实现的业务接口如下；本服务为后端，不包含操作前端。
 
 - POST `/api/finance/receivables/create`：ReceivableCreateRequest JSON，成功data为单据ID。
 - GET `/api/finance/receivables/detail?id=...&legalEntityId=...`：包含逐行余额、来源、税率、分类汇总和结算状态。
@@ -100,3 +100,16 @@ POST `/api/finance/invoice-links/register`，要求 `ar:invoice:write`：`reques
 GET `/api/finance/invoice-links/detail?id=...&legalEntityId=...`，要求 `ar:read`，返回header与allocations；有效BLUE逐分配返回redAvailableAmount，RED或已撤销BLUE该值为null。
 
 POST `/api/finance/invoice-links/reverse`，要求 `ar:reverse`：`requestKey`、`legalEntityId`、`invoiceId`、`reason`。按持久化分配精确恢复已开票金额、保留历史并新增逆向事件；其他发票分配不变。有有效RED时BLUE拒绝撤销，须先撤销RED。撤销RED可能使原组净开票额度再次为负，此时新BLUE仍受当前共享额度约束；撤销不自动生成应收调整或修改外部发票。
+
+
+## 应收作废
+
+POST `/api/finance/receivables/void`：`requestKey`、`legalEntityId`、`documentId`、`reason`，要求`ar:void`。有权限财务直接执行，无审批；原因必填。整单原子作废。
+
+POST `/api/finance/receivables/void-upstream`：`requestKey`、`legalEntityId`、`sourceSystem`、`sources`、`reason`，要求精确权限`ar:void:upstream:<sourceSystem>`。sources最多200个不重复对象，每个包含sourceType/sourceId/可选sourceLineId；取消所选来源槽对应的全部应收行，可跨应收单。NULL行只匹配NULL，空字符串和具体行各自独立，取消所有具体行须显式列出。取消先于生成到达也会保存来源拦截。
+
+响应`eventId/documentIds/lineIds`：事件ID及本次发生变化的单据、作废行。相同请求重放返回原结果；新请求重复作废不再次改变余额。部分来源取消后其他行仍有效，全部行VOID后单头才VOID；部分作废原因在对应事件中，整单作废原因/操作人/时间及version由详情返回。
+
+有效核销、余额转入、开票关联或非零占用均阻止作废；须先通过原业务撤销。外部有效调整指定原行时先取消调整；不能扩大原组/价税类型/税率的共享开票缺口。原额、税率、来源及历史分配保留，只将作废行open归零。来源blocked阻止新事件重新生成，不提供隐式恢复或自动解除入口。
+
+事务锁序为来源→单头→有序物理及开票业务组→行，READ_COMMITTED重读依赖；状态、来源拦截、完整前后快照和幂等结果原子提交。此动作不自动撤销收款或外部税务发票。外部通知投递仍待后续任务实现。

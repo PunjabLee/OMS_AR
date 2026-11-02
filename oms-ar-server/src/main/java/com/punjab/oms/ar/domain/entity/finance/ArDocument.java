@@ -5,6 +5,15 @@ import com.baomidou.mybatisplus.annotation.TableName;
 /** document持久化记录。 @author Punjab */
 @TableName("oms_ar_document")
 public class ArDocument extends ArBaseEntity {
+    private String voidReason;
+    private String voidedBy;
+    private LocalDateTime voidedTime;
+    public String getVoidReason(){return voidReason;}
+    public void setVoidReason(String v){voidReason=v;}
+    public String getVoidedBy(){return voidedBy;}
+    public void setVoidedBy(String v){voidedBy=v;}
+    public LocalDateTime getVoidedTime(){return voidedTime;}
+    public void setVoidedTime(LocalDateTime v){voidedTime=v;}
     private String docNo;
     private Long customerId;
     private Long legalEntityId;

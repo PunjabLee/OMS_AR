@@ -25,7 +25,7 @@ class ReceivableHttpRealTest {
   p.add("spring.datasource.username",()->"oms_ar");p.add("spring.datasource.password",()->System.getenv("AR_TEST_PASSWORD"));
   p.add("ar.auth.clients[0].token",()->TOKEN);p.add("ar.auth.clients[0].username",()->"http-integration");
   p.add("ar.auth.clients[0].legal-entities[0]",()->"1");
-  p.add("ar.auth.clients[0].permissions[0]",()->"ar:create");p.add("ar.auth.clients[0].permissions[1]",()->"ar:read");p.add("ar.auth.clients[0].permissions[2]",()->"ar:receipt:create");p.add("ar.auth.clients[0].permissions[3]",()->"ar:settle");p.add("ar.auth.clients[0].permissions[4]",()->"ar:reverse");p.add("ar.auth.clients[0].permissions[5]",()->"ar:balance:transfer");p.add("ar.auth.clients[0].permissions[6]",()->"ar:invoice:write");
+  p.add("ar.auth.clients[0].permissions[0]",()->"ar:create");p.add("ar.auth.clients[0].permissions[1]",()->"ar:read");p.add("ar.auth.clients[0].permissions[2]",()->"ar:receipt:create");p.add("ar.auth.clients[0].permissions[3]",()->"ar:settle");p.add("ar.auth.clients[0].permissions[4]",()->"ar:reverse");p.add("ar.auth.clients[0].permissions[5]",()->"ar:balance:transfer");p.add("ar.auth.clients[0].permissions[6]",()->"ar:invoice:write");p.add("ar.auth.clients[0].permissions[7]",()->"ar:void");p.add("ar.auth.clients[0].permissions[8]",()->"ar:void:upstream:WMS");
  }
  @LocalServerPort int port;
  @Autowired JdbcTemplate jdbc;
@@ -110,6 +110,16 @@ class ReceivableHttpRealTest {
    post(client,invoiceRoot+"/reverse",blueReverse);
    assertThat(jdbc.queryForObject("SELECT invoiced_amount FROM oms_ar_line WHERE id=?",java.math.BigDecimal.class,priceLine)).isEqualByComparingTo("0");
    assertThat(jdbc.queryForObject("SELECT open_amount FROM oms_ar_line WHERE id=?",java.math.BigDecimal.class,priceLine)).isEqualByComparingTo("100");
+   var voidBody=Map.of("requestKey",UUID.randomUUID().toString(),"legalEntityId",1,"documentId",id,"reason","http void");
+   var voidResult=post(client,root+"/void",voidBody);assertThat(voidResult.at("/data/lineIds/0").asLong()).isEqualTo(priceLine);
+   assertThat(post(client,root+"/void",voidBody).at("/data/eventId").asLong()).isEqualTo(voidResult.at("/data/eventId").asLong());
+   var voidDetail=client.send(HttpRequest.newBuilder(URI.create(root+"/detail?id="+id+"&legalEntityId=1")).header("Authorization","Bearer "+TOKEN).GET().build(),HttpResponse.BodyHandlers.ofString());
+   assertThat(voidDetail.statusCode()).isEqualTo(200);assertThat(json.readTree(voidDetail.body()).at("/data/document/voidReason").asText()).isEqualTo("http void");assertThat(json.readTree(voidDetail.body()).at("/data/settlementStatus").asText()).isEqualTo("VOID");
+   String canceledSource=UUID.randomUUID().toString();
+   var upstream=post(client,root+"/void-upstream",Map.of("requestKey",UUID.randomUUID().toString(),"legalEntityId",1,"sourceSystem","WMS","sources",List.of(Map.of("sourceType","OUTBOUND","sourceId",canceledSource)),"reason","cancel before delivery"));
+   assertThat(upstream.at("/data/lineIds").size()).isZero();
+   var late=(com.fasterxml.jackson.databind.node.ObjectNode)json.readTree(body);late.put("requestKey",UUID.randomUUID().toString());((com.fasterxml.jackson.databind.node.ObjectNode)late.at("/lines/0")).set("source",json.valueToTree(Map.of("system","WMS","type","OUTBOUND","id",canceledSource,"number",canceledSource,"eventId",UUID.randomUUID().toString(),"outputKey","price")));
+   var lateResult=client.send(HttpRequest.newBuilder(URI.create(root+"/create")).header("Authorization","Bearer "+TOKEN).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(late))).build(),HttpResponse.BodyHandlers.ofString());assertThat(lateResult.statusCode()).isEqualTo(409);
    assertThat(detail.statusCode()).isEqualTo(200);assertThat(json.readTree(detail.body()).at("/data/principal/openAmount").decimalValue()).isEqualByComparingTo("100");
   }
  }

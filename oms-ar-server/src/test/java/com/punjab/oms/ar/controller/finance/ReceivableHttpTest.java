@@ -23,7 +23,7 @@ class ReceivableHttpTest {
   var properties=new ApiAuthProperties();properties.setClients(List.of(new ApiAuthProperties.Client(TOKEN,"configured-user",Set.of(1L),Set.of("ar:create","ar:read"))));
   ReceivableService service=request->{observedActor=CurrentUser.require(request.legalEntityId(),"ar:create");return 42L;};
   var queries=new QueryStub();
-  mvc=MockMvcBuilders.standaloneSetup(new ReceivableController(service,queries)).setControllerAdvice(new ApiExceptionHandler()).addFilters(new ApiAuthenticationFilter(properties,new ObjectMapper())).build();
+  mvc=MockMvcBuilders.standaloneSetup(new ReceivableController(org.mockito.Mockito.mock(ReceivableVoidService.class),service,queries)).setControllerAdvice(new ApiExceptionHandler()).addFilters(new ApiAuthenticationFilter(properties,new ObjectMapper())).build();
  }
  /** 只替代服务边界，HTTP和鉴权使用真实组件。 @author Punjab */
  static class QueryStub implements ReceivableQueryService {

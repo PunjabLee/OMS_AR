@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 /** 应收HTTP协议适配。 @author Punjab */
 @RestController @RequestMapping("/api/finance/receivables") @RequiredArgsConstructor
 public class ReceivableController {
+ private final ReceivableVoidService voids;
  private final ReceivableService service;private final ReceivableQueryService queries;
  @Operation(summary="创建应收单",description="创建应收单")
  @PostMapping("/create") public ApiReturn<Long> create(@Valid @RequestBody ReceivableCreateRequest request){return ApiReturn.of(service.create(request));}
@@ -18,4 +19,9 @@ public class ReceivableController {
  @GetMapping("/detail") public ApiReturn<ReceivableResponse> detail(@Valid @ModelAttribute ReceivableDetailQuery query){return ApiReturn.of(queries.detail(query));}
  @Operation(summary="分页查询应收单",description="分页查询应收单")
  @PostMapping("/page") public ApiReturn<PageResult<ReceivableResponse.Document>> page(@Valid @RequestBody ReceivablePageQuery query){return ApiReturn.of(queries.page(query));}
+ @Operation(summary="财务作废应收单",description="财务作废应收单")
+ @PostMapping("/void") public ApiReturn<com.punjab.oms.ar.domain.vo.finance.ReceivableVoidResponse> voidDocument(@Valid @RequestBody com.punjab.oms.ar.domain.dto.finance.ReceivableVoidRequest request){return ApiReturn.of(voids.voidDocument(request));}
+ @Operation(summary="上游作废来源应收",description="上游作废来源应收")
+ @PostMapping("/void-upstream") public ApiReturn<com.punjab.oms.ar.domain.vo.finance.ReceivableVoidResponse> voidUpstream(@Valid @RequestBody com.punjab.oms.ar.domain.dto.finance.UpstreamVoidRequest request){return ApiReturn.of(voids.voidUpstream(request));}
+
 }

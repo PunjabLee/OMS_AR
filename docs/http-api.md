@@ -171,7 +171,7 @@ ar:
         bearer-token: ${AR_FINANCE_RECEIVER_TOKEN}
 ```
 
-接收端按Idempotency-Key去重，持久处理成功后返回2xx。发送原始队列payload而非最新业务状态；通知可能重复、乱序，消费者可结合事件ID和对象版本处理。重定向不跟随，失败按上限重试，耗尽进入DEAD。接收地址及凭据不会经HTTP业务API返回。通知查询入口见下节，人工重试与操作审计仍在下一细分任务实现。
+接收端按Idempotency-Key去重，持久处理成功后返回2xx。发送原始队列payload而非最新业务状态；通知可能重复、乱序，消费者可结合事件ID和对象版本处理。重定向不跟随，失败按上限重试，耗尽进入DEAD。接收地址及凭据不会经HTTP业务API返回。通知查询入口见下节，人工重试与操作审计见下节。
 
 
 ### 通知运营查询
@@ -181,4 +181,15 @@ ar:
 - POST /api/finance/notifications/page：对象包含legalEntityId必填；eventId、status、destination可选；page默认1，size默认20、最大200。status为PENDING/PROCESSING/RETRY/SENT/DEAD，destination仅支持FINANCE_EVENTS。按ID倒序，总数和列表使用同一一致快照。
 - GET /api/finance/notifications/detail?id=...&legalEntityId=...：返回notification元数据与payload原始JSON结构，主体不匹配或已删除时不可读取。
 
-元数据包含事件ID、主体、目的地、状态、当前轮尝试次数、下次尝试时间、租约截止时间、成功时间、安全错误分类、版本与创建/更新审计。列表不加载payload，不返回租约令牌；详情不返回租约令牌、接收地址或Bearer凭据。完整payload可能包含同一主体多个客户的业务变化，因此该权限应授予负责主体级集成的运营人员。字段version将供后续人工重试的并发校验使用。
+元数据包含事件ID、主体、目的地、状态、当前轮尝试次数、下次尝试时间、租约截止时间、成功时间、安全错误分类、版本与创建/更新审计。列表不加载payload，不返回租约令牌；详情不返回租约令牌、接收地址或Bearer凭据。完整payload可能包含同一主体多个客户的业务变化，因此该权限应授予负责主体级集成的运营人员。字段version用于人工重试的并发校验。
+
+
+### 人工重试与操作审计
+
+POST /api/finance/notifications/retry，需主体授权及ar:outbox:retry。请求对象包含requestKey（最长128）、legalEntityId、outboxId、expectedVersion（从通知查询取得）及reason（必填、最长500）。仅FINANCE_EVENTS目的地且状态为RETRY或DEAD允许重试；PENDING、PROCESSING（包括过期但尚未回收的租约）和SENT均拒绝。版本变化返回业务冲突，请刷新记录后使用新请求键。
+
+成功返回重试审计ID，将原通知置PENDING，本轮attemptCount清零、错误分类清空、nextAttemptAt设为数据库当前时间，版本加一。原eventId、payload和外发幂等键不变，不创建新业务事件/通知。自动派发仍受原开关及接收端配置控制，人工重试不会绕过关闭状态立即发网络请求。
+
+同主体/操作人/requestKey的完全相同请求返回同一审计ID；即使通知随后已再次领取或发送，也不重复重置状态。相同键但参数不同拒绝。状态修改、独立审计和幂等结果在同一事务提交，审计失败时全部回滚。
+
+POST /api/finance/notifications/retries/page，需ar:outbox:read。请求包含legalEntityId、outboxId及page/size（默认1/20，最大200）。按ID倒序查询该通知的重试记录，返回原因、操作人/时间、重试前状态/尝试数/下次尝试时间/错误/版本，以及重试后PENDING/0/下次尝试时间/版本。不返回租约令牌或payload。attemptCount是当前轮计数，历史轮计数保存在各次审计中；没有修改或删除审计的业务接口。

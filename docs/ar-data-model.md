@@ -102,3 +102,10 @@ OutboxDispatchService每轮对每个已配置主体最多领取一条，HTTP在N
 
 
 调度时间口径修正：初次入队next_attempt_at由数据库CURRENT_TIMESTAMP(6)默认填充，不使用应用本地时间；自动重试、租约截止和成功时间同样使用数据库时钟。新增实库验证从业务创建到立即领取的完整路径，防止应用与数据库时区不一致造成初次发送延迟。旧版本已写入的时间不自动改写。
+
+
+## 人工重试审计（V012）
+
+oms_ar_outbox_retry通过outbox_id和operation_id外键关联原通知与幂等请求；operation_id唯一、(outbox_id,before_version)唯一，保证每个操作/每个前版本仅一条审计。记录主体、原因、前后状态、尝试数、调度时间、错误、版本及六个审计字段。CHECK约束前状态RETRY/DEAD、后状态PENDING、后尝试数0、版本恰加一。
+
+人工重试按幂等请求锁→通知行锁顺序，在READ_COMMITTED事务内校验权限/原因/版本/状态，CAS重置运行状态，读取数据库生成的next_attempt_at后保存审计与幂等结果。查询历史使用REPEATABLE_READ一致快照，先确认通知属于授权主体且未删除，再用相同范围过滤计数和记录。该运营审计不进入财务事件通知队列，避免递归外发；不更改应收、收款、核销或开票金额。

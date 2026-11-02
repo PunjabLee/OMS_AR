@@ -121,3 +121,7 @@ POST `/api/finance/receivables/void-upstream`：`requestKey`、`legalEntityId`�
 POST `/api/finance/receivables/lifecycle/page`，要求`ar:read`，入参`legalEntityId/documentId/page/size`；页号从1开始，默认20条，最多200条。返回标准分页，按事件ID倒序；生成、核销、开票、撤销、作废等凡涉及该单头或明细的事件均可查询，作废历史不隐藏。
 
 每条事件包含类型、发生/记录时间、操作人、原因、触发对象、关联编号、reverseOfId、schemaVersion及changes。变化包含objectType/objectId、JSON对象格式的beforeSnapshot/deltaSnapshot/afterSnapshot及前后版本，初始化前快照为null。事件采用EXISTS去重计数；只返回当前单头及所属明细的变化，同事件涉及其他应收、收款或账户的快照不会混入。本接口是单据视角，不替代收款/账户/来源对象的专用查询。
+
+## 核销单详情
+
+GET `/api/finance/settlements/detail?id=...&legalEntityId=...`，要求`ar:read`。返回header（类型、客户/主体/币种、金额、策略、状态、收款ID、原因、版本及创建人/时间）、allocations（顺序、双方应收行、金额类型和原分配金额）、accountId及usages（分配ID、来源批次ID、使用金额和顺序）。非余额抵扣的accountId为null、usages为空；反核销后仍返回原分配，header.status为REVERSED。金额表达原核销分配，不代表当前有效占用。

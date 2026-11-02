@@ -137,3 +137,7 @@ Ruling: 来源无行号是独立的单据级槽，NULL与空字符串严格区�
 验证：初始测试局部变量重复赋值导致编译失败，修正后3项用例均因服务未实现失败，再实现转绿。覆盖生成→作废快照、跨单同事件变化隔离、分页/最大页/非法参数/主体权限；全137项实库/HTTP及26项默认测试通过（work/lifecycle-real.log、work/lifecycle-default.log）。随后增加真实HTTP检查创建、收款核销、正负抵销、余额抵扣、开票/撤销及作废事件查询，单独HTTP通过（work/lifecycle-http.log）。git diff --check通过。
 
 范围说明：单据视角只返回当前DOCUMENT/LINE快照，其他对象初始化/账户/收款快照仍完整保存，但不在此接口跨对象暴露。后续核销/账户/批次查询、对账、通知投递及正式迁移/最终整体验收仍未完成。
+
+任务10c完成（2026-11-02）：核销单详情GET /api/finance/settlements/detail。Query经Converter到BO，先校验ar:read与单头主体范围，再在RR快照中读取原分配、余额核销账户和逐笔批次使用记录；REVERSED历史仍可查询，不按当前余额重算。三类核销共用查询契约，无实体穿透Controller。
+
+验证：真实HTTP新增三类核销详情、反核销状态及跨主体403，初次404红灯后实现。第一轮完整回归发现测试假定FIFO必用本次新转入批次，与共享测试账户的早期可用批次不符；改为核对该核销单持久化的实际批次ID，未修改业务FIFO。最终137项实库/HTTP通过（work/settlement-detail-final-real.log）；默认26项通过/137项门禁跳过（work/settlement-detail-default.log）；git diff --check通过。核销分页、账户/批次列表、对账、通知重试与正式迁移/最终验收仍待完成。

@@ -79,3 +79,12 @@ outbox保存事件ID、主体、逻辑目的地及JSON payload，事件/目的�
 payload外层schemaVersion=1，包含eventId、legalEntityId、destination、完整event及按变化ID排序的changes；before/delta/afterSnapshot均为JSON结构，保留对象ID、前后版本、反向事件等追溯字段。当前仅保存队列，没有外发网络调用。后续发送须直接使用存储payload，不按最新业务数据重建。
 
 新事件event.schemaVersion=2：快照中的小数以精确十进制文本保存（包括金额、税率和汇率），整数仍可为JSON数值；读取方须使用十进制解析，同时兼容整数数值。这样避免MySQL JSON将大额小数转为二进制浮点而舍入。业务DECIMAL列、普通业务接口金额类型和幂等请求摘要不变。历史schemaVersion=1流水保持原样，不尝试凭当前余额重建历史精度；旧流水中已发生的舍入无法由此修复。对账JSON_VALUE(... RETURNING DECIMAL)兼容两种表示。
+
+
+## 通知租约与失败状态
+
+后台内部服务按主体及FINANCE_EVENTS领取到期的PENDING/RETRY或租约已过期的PROCESSING记录，过滤已删除数据。数据库时钟NOW(6)、ID顺序和FOR UPDATE SKIP LOCKED用于短事务领取；每次实际取得租约时attempt_count加一，包含之后进程崩溃的尝试。达到次数上限的到期记录进入DEAD，不再自动发送。若一次调用只清理了耗尽记录，可以返回空；调度器下一轮继续处理后续队列。
+
+领取和结果确认分别为REQUIRES_NEW/READ_COMMITTED事务。固定SQL用于数据库时间、行锁及CAS，属于DAO规范的明确扩展；DAO本身不开事务。确认必须同时匹配ID、主体、目的地、PROCESSING、租约令牌及未过期时间。过期工作者即使尚无人重领也不能确认。确认成功清空租约；成功保存sent_time，失败按尝试次数进入RETRY或DEAD。仅保存HTTP状态或预定义错误分类，不保存远端正文、异常详情或凭据。通知payload与财务余额不变。
+
+租约只能约束本地状态，不能撤回远端已经处理的请求；接收端仍必须按eventId+destination去重。下一步发送器须在事务外发出请求、限制总超时，并使用超过请求超时的租约。当前租约服务没有HTTP映射，也未开启调度或外发。

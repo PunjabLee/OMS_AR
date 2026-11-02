@@ -1,0 +1,7 @@
+# Isolated real-test contexts share one local MySQL instance.
+# Keep idle pools small without changing production datasource settings.
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 0

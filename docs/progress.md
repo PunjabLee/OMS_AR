@@ -196,3 +196,10 @@ Ruling: 入队精度回归发现MySQL JSON将9999999999999999.12345678舍入为1
 验证：最初4项原子入队测试红灯后转绿；触发器故障注入因测试用户无SUPER权限不可用，改为测试操作人专属临时CHECK，并finally删除。精度用例先红（1e16）后绿，追加创建路径数据库/通知保真和MANDATORY约束，共7项新增。最终170项实库/HTTP通过（work/outbox-enqueue-final-real.log），默认26项通过/170项门禁跳过（work/outbox-enqueue-final-default.log），git diff --check通过。所有原有创建型实库夹具补齐V011前置建表。
 
 下一步12c：服务端配置接收端、默认关闭的派发、短事务租约领取/事务外HTTP/token确认、重试与DEAD/人工重试及查询、本机模拟HTTP验证。随后版本迁移、启动验收与最终全分支审查；整体目标未完成。
+
+
+任务12c1完成（2026-11-02）：内部通知租约服务，REQUIRES_NEW/READ_COMMITTED短事务，主体/目的地/未删除/到期筛选，ID顺序FOR UPDATE SKIP LOCKED；数据库NOW(6)统一计时。每次领取递增尝试数，超限记录进入DEAD；过期租约可恢复。结果确认须同时匹配主体、记录、令牌、PROCESSING和未过期租约，防止旧工作者覆盖新结果。成功/失败清除租约，失败保存预定义错误分类并延后重试；不触碰payload和业务余额。尚未外发。
+
+验证：8项新测试从空实现红灯转绿，覆盖成功幂等确认、错误令牌、重试延期/耗尽、崩溃过期/耗尽、跳过队首锁、双工作者竞争、范围过滤及参数分类。首次全量因17个测试上下文默认连接池累计耗尽MySQL连接失败，明确错误Too many connections；新增仅src/test/resources/application-pre.yml限制max=5/minIdle=0，生产不变。最终178项实库/HTTP通过（work/outbox-lease-final-real.log），默认26项通过/178项跳过（work/outbox-lease-final-default.log），git diff --check通过。
+
+下一步12c2默认关闭发送器、固定配置、事务外带总超时HTTP、指数退避和本机模拟测试；12c3查询/人工重试。租约只是本地状态保护，不提供远端严格一次保证。

@@ -163,3 +163,9 @@ Ruling: 来源无行号是独立的单据级槽，NULL与空字符串严格区�
 验证：两项新增差异测试在未实现时明确失败，其余原测试及新增正常负数抵销/反核销、余额抵扣反核销/转入撤销无误报。实现后全147项实库/HTTP通过（work/invoice-integrity-real.log），默认26项通过/147项门禁跳过（work/invoice-integrity-default.log），git diff --check通过。已落实前次评审建议的负数和余额逆向正常对账回归。
 
 11b尚未全部完成：明细open/VOID占用、初始化及末次版本快照一致性、关联范围/价税属性、孤立来源关联等结构诊断仍待实现；不把这两条发票金额规则等同完整审计。其后outbox、重试、迁移及整体最终审查仍保留。
+
+任务11b2完成（2026-11-02）：LINE_OPEN、LINE_VOID_OCCUPANCY、LINE_AUDIT_INITIAL、LINE_AUDIT_LATEST。初始化核对原额/税率/计税依据/类型/组及单据归属；末次有效变化同时核对版本、状态、全部金额。要求JSON字段存在，NULL与零区分，金额/税率以DECIMAL比较，排除已删除事件及变化。布尔异常1/0只是差异标识，不是金额。
+
+验证：版本/税率绕过流水及隐藏初始化两项先红后绿；原正常创建核销/开票/负数抵销及余额逆向链无误报。余额恒等式/VOID占用测试最初误用MySQL不支持的check_constraint_checks变量，在任何数据修改前报错；改为仅隔离库临时ALTER CHECK NOT ENFORCED，finally恢复两条fixture并ENFORCED，完整150项实库/HTTP通过（work/line-audit-verified-real.log）。默认26项通过/150项门禁跳过（work/line-audit-final-default.log）；git diff --check通过。旧人为损坏投影fixture现在也被审计规则识别，原金额规则断言改为精确筛选该规则/包含对应差异，不再假定只存在金额差异。
+
+11b剩余：关联范围/价税属性、孤立来源与关联诊断；本次不宣称所有对象或中间事件连续性已检查。outbox、重试、迁移、启动验收及全分支评审仍待完成。

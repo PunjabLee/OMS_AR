@@ -143,3 +143,5 @@ POST `/api/finance/reconciliation/page`，要求`ar:read`；legalEntityId/custom
 接口不修改任何余额或流水。审计版本快照、关联范围/结构完整性等进一步检查尚在后续任务中，不能将本报告无差异解释为全部数据正确。
 
 对账补充规则：`INVOICE_TOTAL`核对发票单头带符号总额与原始分配合计，含已撤销历史；`INVOICE_RED_EXCESS`以原蓝字分配为对象，storedAmount为有效红字累计绝对金额，expectedAmount为原蓝字分配上限，仅超过上限时报差异。少于上限属于正常部分红冲，不报告。其他关联结构及审计版本检查仍在后续任务中。
+
+明细审计规则：LINE_OPEN检查ACTIVE余额恒等式及VOID余额归零；LINE_VOID_OCCUPANCY检查作废行不得有核销、转入或开票占用；LINE_AUDIT_INITIAL检查有效初始化快照存在且原额、税率/计税依据、类型及归属一致；LINE_AUDIT_LATEST检查末次有效变化的版本、状态、全部金额及上述不变属性与当前行一致。审计布尔异常以storedAmount=1、expectedAmount=0表示，不代表货币金额。此处仅检查明细初始化及末次快照，不宣称已验证所有中间事件连续性或所有对象审计。

@@ -141,3 +141,9 @@ Ruling: 来源无行号是独立的单据级槽，NULL与空字符串严格区�
 任务10c完成（2026-11-02）：核销单详情GET /api/finance/settlements/detail。Query经Converter到BO，先校验ar:read与单头主体范围，再在RR快照中读取原分配、余额核销账户和逐笔批次使用记录；REVERSED历史仍可查询，不按当前余额重算。三类核销共用查询契约，无实体穿透Controller。
 
 验证：真实HTTP新增三类核销详情、反核销状态及跨主体403，初次404红灯后实现。第一轮完整回归发现测试假定FIFO必用本次新转入批次，与共享测试账户的早期可用批次不符；改为核对该核销单持久化的实际批次ID，未修改业务FIFO。最终137项实库/HTTP通过（work/settlement-detail-final-real.log）；默认26项通过/137项门禁跳过（work/settlement-detail-default.log）；git diff --check通过。核销分页、账户/批次列表、对账、通知重试与正式迁移/最终验收仍待完成。
+
+任务10d完成（2026-11-02）：核销单、账户和余额批次三种分页。各自Query/BO通过MapStruct转换，公共主体必填/客户币种可选，核销类型状态及收款ID、批次账户/来源行/状态筛选；Service授权ar:read并RR一致读，DAO使用同一Lambda过滤对象计数及固定ID倒序取页，长整型offset避免页码乘法溢出，不接受外部排序SQL。保留REVERSED，排除逻辑删除。
+
+验证：HTTP初始404红灯后实现，覆盖三种记录筛选/总数/原ID、超大页码空结果；全137项实库/HTTP及26项默认测试通过（work/finance-pages-real.log、work/finance-pages-default.log）。追加三个入口size=201返回400、主体越权返回403，单独HTTP通过（work/finance-pages-http.log）。git diff --check通过。当前未接入MyBatis分页插件，沿用固定SQL分页方式，LIMIT/OFFSET仅由服务校验后的整数生成。
+
+下一阶段：对账不变量校验与差异报告，通知outbox及重试、正式版本化迁移与本机启动验收、最终整分支审查。整体目标未完成。

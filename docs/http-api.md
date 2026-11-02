@@ -125,3 +125,11 @@ POST `/api/finance/receivables/lifecycle/page`，要求`ar:read`，入参`legalE
 ## 核销单详情
 
 GET `/api/finance/settlements/detail?id=...&legalEntityId=...`，要求`ar:read`。返回header（类型、客户/主体/币种、金额、策略、状态、收款ID、原因、版本及创建人/时间）、allocations（顺序、双方应收行、金额类型和原分配金额）、accountId及usages（分配ID、来源批次ID、使用金额和顺序）。非余额抵扣的accountId为null、usages为空；反核销后仍返回原分配，header.status为REVERSED。金额表达原核销分配，不代表当前有效占用。
+
+## 财务记录分页
+
+以下均为POST对象请求，要求`ar:read`。共同字段：必填legalEntityId，可选customerId/currency，page默认1、size默认20且最多200。按ID倒序，返回标准PageResult，总数与记录使用相同筛选和一致读快照。逻辑删除记录不返回，业务撤销记录保留。
+
+- `/api/finance/settlements/page`：可选status=POSTED/REVERSED、settlementType=RECEIPT/OFFSET/BALANCE、receiptId，返回核销单Header。
+- `/api/finance/customer-balances/page`：返回账户ID、客户/主体/币种、余额和版本。
+- `/api/finance/customer-balances/lots/page`：可选status=ACTIVE/REVERSED、accountId、sourceLineId，返回原转入金额、已使用金额及来源行。ACTIVE批次可用额为amount-usedAmount；REVERSED历史金额不代表当前可用余额。

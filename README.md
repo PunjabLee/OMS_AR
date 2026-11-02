@@ -41,4 +41,4 @@ oms_ar_test用于业务夹具，首次自动创建，后续不清空；这些用
 - [数据模型](docs/ar-data-model.md)
 - [开发进度与验证记录](docs/progress.md)
 
-当前尚待最终全需求验收矩阵和全分支评审；预留的DOCUMENT_TAX_FIRST策略未启用，实际核销使用GROUP_TAX_FIRST。外部通知采用可重试、可能重复的投递机制，不宣称跨系统严格一次处理。
+本期本机后端交付已完成，见[需求验收矩阵](docs/acceptance-matrix.md)和[独立评审结论](docs/final-review.md)；预留的DOCUMENT_TAX_FIRST策略未启用，实际核销使用GROUP_TAX_FIRST。外部通知采用可重试、可能重复的投递机制，不宣称跨系统严格一次处理。

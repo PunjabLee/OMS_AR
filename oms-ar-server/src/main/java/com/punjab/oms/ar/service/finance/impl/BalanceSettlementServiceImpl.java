@@ -31,7 +31,7 @@ public class BalanceSettlementServiceImpl implements BalanceSettlementService {
   }
   for(var entry:lotDeltas.entrySet())changes.add(moveLot(lots.get(entry.getKey()),entry.getValue(),ticket.actor()));
   changes.add(moveAccount(account,view.usedAmount().negate(),ticket.actor()));
-  journal.append(new JournalEventRequest("BALANCE_SETTLED",ticket.actor(),request.reason(),"SETTLEMENT",settlement.getId().toString(),"balance-settle:"+ticket.id(),null,changes));journal.complete(ticket,settlement.getId());return settlement.getId();
+  journal.append(new JournalEventRequest("BALANCE_SETTLED",ticket.actor(),request.reason(),"SETTLEMENT",settlement.getId().toString(),"balance-settle:"+ticket.id(),null,changes),ticket);journal.complete(ticket,settlement.getId());return settlement.getId();
  }
  @Override @Transactional(rollbackFor=Exception.class)
  public Long reverse(SettlementReverseRequest request){
@@ -61,7 +61,7 @@ public class BalanceSettlementServiceImpl implements BalanceSettlementService {
   for(var lot:lots)changes.add(moveLot(lot,usageByLot.get(lot.getId()).negate(),ticket.actor()));changes.add(moveAccount(account,total,ticket.actor()));
   String before=values.json(settlement);long version=settlement.getVersion();settlement.setStatus("REVERSED");settlement.setVersion(version+1);touch(settlement,ticket.actor());check(settlements.update(settlement,version));changes.add(new JournalEventRequest.Change("SETTLEMENT",settlement.getId(),before,values.json(Map.of("status","REVERSED")),values.json(settlement),version,settlement.getVersion()));
   Long original=settlements.postedEvent(settlement.getId());if(original==null)throw new ServiceException("原核销事件缺失");
-  journal.append(new JournalEventRequest("SETTLEMENT_REVERSED",ticket.actor(),request.reason(),"SETTLEMENT",settlement.getId().toString(),"reverse:"+ticket.id(),original,changes));journal.complete(ticket,settlement.getId());return settlement.getId();
+  journal.append(new JournalEventRequest("SETTLEMENT_REVERSED",ticket.actor(),request.reason(),"SETTLEMENT",settlement.getId().toString(),"reverse:"+ticket.id(),original,changes),ticket);journal.complete(ticket,settlement.getId());return settlement.getId();
  }
  private State load(BalanceSettlementPreviewRequest request,boolean lock){
   if(new HashSet<>(request.groupIds()).size()!=request.groupIds().size())throw new ServiceException("业务组不能重复选择");

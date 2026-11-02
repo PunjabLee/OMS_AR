@@ -22,7 +22,7 @@ public class ReceiptServiceImpl implements ReceiptService {
   var receipt=values.initialize(converter.toEntity(request),ticket.actor());receipt.setAllocatedAmount(BigDecimal.ZERO);receipt.setVersion(0L);
   if(!dao.create(receipt))throw new ServiceException("收款保存失败");
   String snapshot=values.json(receipt);
-  journal.append(new JournalEventRequest("RECEIPT_CREATED",ticket.actor(),"收款登记",request.sourceSystem(),request.sourceId(),"receipt:"+ticket.id(),null,List.of(new JournalEventRequest.Change("RECEIPT",receipt.getId(),null,snapshot,snapshot,null,0L))));
+  journal.append(new JournalEventRequest("RECEIPT_CREATED",ticket.actor(),"收款登记",request.sourceSystem(),request.sourceId(),"receipt:"+ticket.id(),null,List.of(new JournalEventRequest.Change("RECEIPT",receipt.getId(),null,snapshot,snapshot,null,0L))),ticket);
   journal.complete(ticket,receipt.getId());return receipt.getId();
  }
  public ReceiptResponse detail(ReceiptDetailQuery query){

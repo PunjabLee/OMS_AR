@@ -46,7 +46,7 @@ public class OffsetServiceImpl implements OffsetService {
    var target=state.targets().stream().filter(x->x.getId().equals(input.lineId())).findFirst().orElseThrow();changes.add(move(target,input.amount(),ticket.actor()));
   }
   changes.add(move(negative,view.usedAmount().negate(),ticket.actor()));
-  journal.append(new JournalEventRequest("OFFSET_SETTLED",ticket.actor(),request.reason(),"SETTLEMENT",settlement.getId().toString(),"offset:"+ticket.id(),null,changes));
+  journal.append(new JournalEventRequest("OFFSET_SETTLED",ticket.actor(),request.reason(),"SETTLEMENT",settlement.getId().toString(),"offset:"+ticket.id(),null,changes),ticket);
   journal.complete(ticket,settlement.getId());return settlement.getId();
  }
  private State load(OffsetPreviewRequest request,boolean lock){

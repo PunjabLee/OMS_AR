@@ -39,7 +39,7 @@ import org.springframework.stereotype.Service;import org.springframework.transac
    doc.setVersion(version+1);touch(doc,ticket.actor());check(dao.updateDocument(doc,version));changes.add(new JournalEventRequest.Change("DOCUMENT",doc.getId(),before,values.json(Map.of("status",doc.getStatus())),values.json(doc),version,doc.getVersion()));
   }
   for(var guard:guards)if(!Boolean.TRUE.equals(guard.getBlocked())){String before=values.json(guard);long version=guard.getVersion();guard.setBlocked(true);guard.setVersion(version+1);touch(guard,ticket.actor());check(dao.blockGuard(guard,version));changes.add(new JournalEventRequest.Change("SOURCE_GUARD",guard.getId(),before,values.json(Map.of("blocked",true)),values.json(guard),version,guard.getVersion()));}
-  long event=journal.append(new JournalEventRequest("RECEIVABLE_VOIDED",ticket.actor(),reason,mode,ticket.id().toString(),"void:"+ticket.id(),null,changes));journal.complete(ticket,event);return result(event);
+  long event=journal.append(new JournalEventRequest("RECEIVABLE_VOIDED",ticket.actor(),reason,mode,ticket.id().toString(),"void:"+ticket.id(),null,changes),ticket);journal.complete(ticket,event);return result(event);
  }
  private void checkInvoiceCapacity(List<ArGroup> groups,Set<Long> removing){
   for(var group:groups){Map<Bucket,BigDecimal> before=new HashMap<>(),removed=new HashMap<>();for(var row:dao.invoiceGroup(group)){

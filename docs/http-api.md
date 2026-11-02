@@ -151,3 +151,8 @@ POST `/api/finance/reconciliation/page`，要求`ar:read`；legalEntityId/custom
 结构补充规则：LINE_PARENT检查明细单头/业务组存在、未逻辑删除、范围一致及有效状态；LINE_SOURCE_MISSING依据有效初始化SOURCE快照发现来源记录缺失或被逻辑删除（直接创建无来源不会误报）；BALANCE_USAGE_RELATION检查使用明细所属核销、分配、来源批次与账户一致；INVOICE_RED_RELATION检查原蓝字、原分配、价税属性及调整指定组/行，原蓝字失效时有效红字报告异常。均为只读1/0结构诊断。
 
 边界：来源和审计缺失检测依赖保留的有效初始化证据；若记录与全部审计证据同时被外部删除，本接口不能凭空还原来源。诊断不是数据库防篡改证明，不校验全部中间事件链，也不替代银行或税务外部对账。
+
+
+### 生命周期快照版本2
+
+新事件schemaVersion=2。beforeSnapshot、deltaSnapshot、afterSnapshot内的小数保存为十进制字符串，防止MySQL JSON浮点舍入；整数值仍可为数字，消费方应采用十进制解析并兼容两种表示。历史版本1原样返回。此变更仅影响审计快照，普通应收/核销/开票响应的金额字段保持既有类型。通知队列保存完整事件快照，当前未启用外发。

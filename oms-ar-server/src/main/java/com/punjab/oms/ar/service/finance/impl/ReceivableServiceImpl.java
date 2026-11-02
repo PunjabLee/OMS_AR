@@ -21,6 +21,8 @@ import java.util.*;
 /** 应收、来源、幂等和快照的统一创建事务。 @author Punjab */
 @Service @RequiredArgsConstructor
 public class ReceivableServiceImpl implements ReceivableService {
+ private final com.punjab.oms.ar.service.finance.OutboxEnqueueService outbox;
+ private final com.punjab.oms.ar.common.utils.FinanceSnapshotJson snapshots;
  private final ReceivableDao dao;
  private final ReceivableConverter converter;
  private final ObjectMapper json;
@@ -82,7 +84,7 @@ public class ReceivableServiceImpl implements ReceivableService {
   persist(dao.createDocument(document));
   ArEvent event=audit(new ArEvent(),actor,now);
   event.setEventType("CREATED");event.setOccurredAt(now);event.setRecordedAt(now);event.setActor(actor);
-  event.setReason(request.reason());event.setCorrelationId("create:"+locked.getId());event.setSchemaVersion(1);
+  event.setReason(request.reason());event.setCorrelationId("create:"+locked.getId());event.setSchemaVersion(2);
   event.setTriggerType(document.getGenerationMode());event.setTriggerId(request.requestKey());persist(dao.createEvent(event));
   snapshot(event,"DOCUMENT",document,actor,now);
   for(var guard:initializedGuards)snapshot(event,"SOURCE_GUARD",guard,actor,now);
@@ -125,6 +127,7 @@ public class ReceivableServiceImpl implements ReceivableService {
     persist(dao.createSource(record));snapshot(event,"SOURCE",record,actor,now);
    }
   }
+  outbox.enqueue(event.getId(),request.legalEntityId(),actor);
   locked.setResultReference(document.getId());locked.setUpdatedTime(now);locked.setUpdatedBy(actor);
   persist(dao.complete(locked));return document.getId();
  }
@@ -156,7 +159,7 @@ public class ReceivableServiceImpl implements ReceivableService {
  private void persist(boolean success){if(!success)throw new ServiceException("应收记录保存失败");}
  private void snapshot(ArEvent event,String type,ArBaseEntity value,String actor,LocalDateTime now){
   ArChange change=audit(new ArChange(),actor,now);change.setEventId(event.getId());change.setObjectType(type);change.setObjectId(value.getId());
-  change.setDeltaSnapshot(serialize(value));change.setAfterSnapshot(serialize(value));change.setAfterVersion(0L);persist(dao.createChange(change));
+  change.setDeltaSnapshot(snapshots.normalize(serialize(value)));change.setAfterSnapshot(snapshots.normalize(serialize(value)));change.setAfterVersion(0L);persist(dao.createChange(change));
  }
  private String serialize(Object value){try{return json.writeValueAsString(value);}catch(Exception exception){throw new ServiceException("快照序列化失败");}}
  private String hash(String value){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));}catch(Exception exception){throw new ServiceException("请求摘要生成失败");}}

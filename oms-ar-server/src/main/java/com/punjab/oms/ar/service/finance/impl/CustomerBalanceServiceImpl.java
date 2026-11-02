@@ -22,7 +22,7 @@ public class CustomerBalanceServiceImpl implements CustomerBalanceService {
   if(account.getVersion()==0L)changes.add(new JournalEventRequest.Change("CUSTOMER_ACCOUNT",account.getId(),null,values.json(account),values.json(account),null,0L));
   changes.add(new JournalEventRequest.Change("BALANCE_LOT",lot.getId(),null,values.json(lot),values.json(lot),null,0L));
   changes.add(moveLine(line,request.amount(),ticket.actor()));changes.add(moveAccount(account,request.amount(),ticket.actor()));
-  journal.append(new JournalEventRequest("BALANCE_TRANSFERRED",ticket.actor(),request.reason(),"BALANCE_LOT",lot.getId().toString(),"balance-transfer:"+ticket.id(),null,changes));journal.complete(ticket,lot.getId());return lot.getId();
+  journal.append(new JournalEventRequest("BALANCE_TRANSFERRED",ticket.actor(),request.reason(),"BALANCE_LOT",lot.getId().toString(),"balance-transfer:"+ticket.id(),null,changes),ticket);journal.complete(ticket,lot.getId());return lot.getId();
  }
  @Override @Transactional(rollbackFor=Exception.class)
  public Long reverseTransfer(BalanceTransferReverseRequest request){
@@ -39,7 +39,7 @@ public class CustomerBalanceServiceImpl implements CustomerBalanceService {
   if(account.getVersion()==0L)changes.add(new JournalEventRequest.Change("CUSTOMER_ACCOUNT",account.getId(),null,values.json(account),values.json(account),null,0L));
   changes.add(new JournalEventRequest.Change("BALANCE_LOT",lot.getId(),before,values.json(Map.of("status","REVERSED")),values.json(lot),version,lot.getVersion()));
   Long original=dao.transferEvent(lot.getId());if(original==null)throw new ServiceException("原转入事件不存在");
-  journal.append(new JournalEventRequest("BALANCE_TRANSFER_REVERSED",ticket.actor(),request.reason(),"BALANCE_LOT",lot.getId().toString(),"balance-reverse:"+ticket.id(),original,changes));journal.complete(ticket,lot.getId());return lot.getId();
+  journal.append(new JournalEventRequest("BALANCE_TRANSFER_REVERSED",ticket.actor(),request.reason(),"BALANCE_LOT",lot.getId().toString(),"balance-reverse:"+ticket.id(),original,changes),ticket);journal.complete(ticket,lot.getId());return lot.getId();
  }
  private JournalEventRequest.Change moveLine(ArLine line,BigDecimal amount,String actor){
   String before=values.json(line);long version=line.getVersion();var transferred=line.getTransferredAmount().subtract(amount);var open=line.getOpenAmount().add(amount);

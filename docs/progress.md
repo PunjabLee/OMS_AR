@@ -187,3 +187,12 @@ Ruling: 来源无行号是独立的单据级槽，NULL与空字符串严格区�
 验证：4项初始测试因表不存在失败；建表后数据库正确拒绝非法状态，但Spring将CHECK错误归为UncategorizedSQLException，测试初版DataIntegrityViolationException假设错误，改为DataAccessException并精确断言MySQL错误码3819。最终163项实库/HTTP通过（work/outbox-schema-final-real.log），默认26项通过/163项门禁跳过（work/outbox-schema-final-default.log）；git diff --check通过。未把表结构视为完整通知功能。
 
 下一步12b：显式主体传播、创建与FinanceJournal统一事务入队、不可变payload及故障回滚；12c：配置固定接收端、后台租约领取、事务外HTTP、重试/DEAD/人工重试查询与本机模拟验证。随后正式迁移与启动、最终验收仍待完成。
+
+
+任务12b完成（2026-11-02）：应收创建及FinanceJournal所有事件路径接入MANDATORY事务入队；JournalTicket显式携带已授权主体。固定FINANCE_EVENTS逻辑目的地，保存事件元数据与按变化ID排序的完整before/delta/after及版本，幂等重放不重复入队。无派发网络调用，发送端尚待12c实现。
+
+Ruling: 入队精度回归发现MySQL JSON将9999999999999999.12345678舍入为1e16（只读实库对照DECIMAL确认）。仅使用Java BigDecimal解析不能恢复已入库精度。因此创建与统一流水的新事件schemaVersion升级2，快照小数规范化成精确十进制字符串，整数保持数值；业务DECIMAL与幂等摘要不变。旧事件不改写，旧快照已丢失的小数不能补救。对账及生命周期读取按新旧表示兼容，接口文档已说明。
+
+验证：最初4项原子入队测试红灯后转绿；触发器故障注入因测试用户无SUPER权限不可用，改为测试操作人专属临时CHECK，并finally删除。精度用例先红（1e16）后绿，追加创建路径数据库/通知保真和MANDATORY约束，共7项新增。最终170项实库/HTTP通过（work/outbox-enqueue-final-real.log），默认26项通过/170项门禁跳过（work/outbox-enqueue-final-default.log），git diff --check通过。所有原有创建型实库夹具补齐V011前置建表。
+
+下一步12c：服务端配置接收端、默认关闭的派发、短事务租约领取/事务外HTTP/token确认、重试与DEAD/人工重试及查询、本机模拟HTTP验证。随后版本迁移、启动验收与最终全分支审查；整体目标未完成。

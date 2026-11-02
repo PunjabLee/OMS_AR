@@ -59,7 +59,7 @@ public class SettlementServiceImpl implements SettlementService {
    changes.add(moveLine(byId.get(input.lineId()),input.amount(),ticket.actor()));
   }
   changes.add(moveReceipt(receipt,settlement.getAmount(),ticket.actor()));
-  journal.append(new JournalEventRequest("RECEIPT_SETTLED",ticket.actor(),request.reason(),"SETTLEMENT",settlement.getId().toString(),"settlement:"+ticket.id(),null,changes));
+  journal.append(new JournalEventRequest("RECEIPT_SETTLED",ticket.actor(),request.reason(),"SETTLEMENT",settlement.getId().toString(),"settlement:"+ticket.id(),null,changes),ticket);
   journal.complete(ticket,settlement.getId());return settlement.getId();
  }
  @Override @Transactional(rollbackFor=Exception.class)
@@ -100,7 +100,7 @@ public class SettlementServiceImpl implements SettlementService {
   String before=values.json(settlement);long version=settlement.getVersion();settlement.setStatus("REVERSED");settlement.setVersion(version+1);touch(settlement,ticket.actor());check(dao.update(settlement,version));
   changes.add(new JournalEventRequest.Change("SETTLEMENT",settlement.getId(),before,values.json(Map.of("status","REVERSED")),values.json(settlement),version,settlement.getVersion()));
   Long originalEvent=dao.postedEvent(settlement.getId());if(originalEvent==null)throw new ServiceException("原核销事件缺失");
-  journal.append(new JournalEventRequest("SETTLEMENT_REVERSED",ticket.actor(),request.reason(),"SETTLEMENT",settlement.getId().toString(),"reverse:"+ticket.id(),originalEvent,changes));
+  journal.append(new JournalEventRequest("SETTLEMENT_REVERSED",ticket.actor(),request.reason(),"SETTLEMENT",settlement.getId().toString(),"reverse:"+ticket.id(),originalEvent,changes),ticket);
   journal.complete(ticket,settlement.getId());return settlement.getId();
  }
  private State load(SettlementPreviewRequest request,boolean lock){

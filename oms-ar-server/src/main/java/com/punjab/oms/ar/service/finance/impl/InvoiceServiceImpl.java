@@ -24,7 +24,7 @@ public class InvoiceServiceImpl implements InvoiceService {
    var allocation=values.initialize(new ArInvoiceAllocation(),ticket.actor());allocation.setInvoiceId(invoice.getId());allocation.setInvoiceKind(invoice.getInvoiceKind());allocation.setInvoiceLineId(line.invoiceLineId());allocation.setReceivableLineId(line.receivableLineId());allocation.setAmountType(line.amountType());allocation.setAmount(line.amount());allocation.setTaxRate(line.taxRate());allocation.setOriginalInvoiceId(input.originalInvoiceId());allocation.setOriginalAllocationId(line.originalAllocationId());check(dao.allocate(allocation));changes.add(initial("INVOICE_ALLOCATION",allocation));deltas.merge(line.receivableLineId(),line.amount(),BigDecimal::add);
   }
   var rows=state.sources().stream().collect(Collectors.toMap(ArLine::getId,Function.identity()));for(var entry:deltas.entrySet())changes.add(move(rows.get(entry.getKey()),entry.getValue(),ticket.actor()));
-  journal.append(new JournalEventRequest("INVOICE_REGISTERED",ticket.actor(),request.reason(),"INVOICE",invoice.getId().toString(),"invoice:"+ticket.id(),null,changes));journal.complete(ticket,invoice.getId());return invoice.getId();
+  journal.append(new JournalEventRequest("INVOICE_REGISTERED",ticket.actor(),request.reason(),"INVOICE",invoice.getId().toString(),"invoice:"+ticket.id(),null,changes),ticket);journal.complete(ticket,invoice.getId());return invoice.getId();
  }
  @Override @Transactional(rollbackFor=Exception.class,isolation=Isolation.READ_COMMITTED)
  public Long reverse(InvoiceReverseRequest request){
@@ -42,7 +42,7 @@ public class InvoiceServiceImpl implements InvoiceService {
   var changes=new ArrayList<JournalEventRequest.Change>();for(var entry:deltas.entrySet())changes.add(move(byId.get(entry.getKey()),entry.getValue(),ticket.actor()));
   String before=values.json(invoice);long version=invoice.getVersion();invoice.setStatus("REVERSED");invoice.setVersion(version+1);touch(invoice,ticket.actor());check(dao.update(invoice,version));changes.add(new JournalEventRequest.Change("INVOICE",invoice.getId(),before,values.json(Map.of("status","REVERSED")),values.json(invoice),version,invoice.getVersion()));
   Long originalEvent=dao.postedEvent(invoice.getId());if(originalEvent==null)throw new ServiceException("原开票关联事件缺失");
-  journal.append(new JournalEventRequest("INVOICE_REVERSED",ticket.actor(),request.reason(),"INVOICE",invoice.getId().toString(),"invoice-reverse:"+ticket.id(),originalEvent,changes));journal.complete(ticket,invoice.getId());return invoice.getId();
+  journal.append(new JournalEventRequest("INVOICE_REVERSED",ticket.actor(),request.reason(),"INVOICE",invoice.getId().toString(),"invoice-reverse:"+ticket.id(),originalEvent,changes),ticket);journal.complete(ticket,invoice.getId());return invoice.getId();
  }
  @Override @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
  public InvoiceResponse detail(InvoiceDetailQuery query){

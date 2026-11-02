@@ -217,3 +217,8 @@ Ruling: 入队精度回归发现MySQL JSON将9999999999999999.12345678舍入为1
 验证：首轮测试因java.nio.file与业务AccessDeniedException同名导入编译失败，改为限定业务异常后4项预期红灯，再实现转绿。另加3项默认HTTP测试覆盖真实路由/绑定、凭据与主体权限、参数校验和线程身份清理。最终191项实库/HTTP通过（work/outbox-query-final-real.log），默认32项通过/191项门禁跳过（work/outbox-query-final-default.log）；git diff --check通过。
 
 下一步12c3b：人工重试只允许RETRY/DEAD，校验独立写权限、原因和当前版本；同请求幂等、重置本轮计数并保留独立操作审计，不改正在发送或成功记录，不产生递归通知。随后正式版本迁移、启动及最终全分支验收。
+
+
+任务12c3前置修复（2026-11-02）：检查人工重试时间口径时发现初次入队next_attempt_at使用应用LocalDateTime.now()，领取/重试使用数据库NOW(6)。只读现场验证本机23:22、数据库15:22，已有测试新通知还需约28650秒才能到期。新增“业务生成通知立即可领取”实库用例稳定红灯。修复为初次入队省略next_attempt_at，由V011数据库CURRENT_TIMESTAMP(6)默认值填入，与租约/重试同钟；不改事件快照、不猜测修补历史记录。
+
+最终192项实库/HTTP通过（work/outbox-clock-final-real.log），默认32项通过/192项门禁跳过（work/outbox-clock-final-default.log），git diff --check通过。该修复单独提交，人工重试与审计继续作为12c3b实施。旧版本已入队的未来时间仍保留原值；当前开发验证库无实际外发，本轮没有批量改写历史通知。

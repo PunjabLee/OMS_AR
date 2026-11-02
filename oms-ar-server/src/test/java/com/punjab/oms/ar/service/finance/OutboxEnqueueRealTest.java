@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.*;
 @EnabledIfSystemProperty(named="ar.outbox-enqueue.real",matches="true") @EnabledIfSystemProperty(named="ar.outbox-enqueue.real.commit",matches="true")
 class OutboxEnqueueRealTest {
  @DynamicPropertySource static void config(DynamicPropertyRegistry p){p.add("spring.datasource.url",()->"jdbc:mysql://127.0.0.1:13306/oms_ar_test");p.add("spring.datasource.username",()->"oms_ar");p.add("spring.datasource.password",()->System.getenv("AR_TEST_PASSWORD"));}
- @Autowired FinanceJournalService journal;@Autowired OutboxEnqueueService outbox;@Autowired org.springframework.transaction.PlatformTransactionManager transactions;
+ @Autowired OutboxLeaseService leases;@Autowired FinanceJournalService journal;@Autowired OutboxEnqueueService outbox;@Autowired org.springframework.transaction.PlatformTransactionManager transactions;
  @Autowired JdbcTemplate jdbc;@Autowired ReceivableService receivables;@Autowired ReceiptService receipts;@Autowired ObjectMapper json;
  String actor;long customer;
  @BeforeEach void setup()throws Exception{
@@ -79,6 +79,14 @@ class OutboxEnqueueRealTest {
   var changes=json.readTree(data.get("payload").toString()).path("changes");boolean found=false;
   for(var change:changes)if(change.path("objectType").asText().equals("LINE")){assertThat(new BigDecimal(change.at("/afterSnapshot/receivableAmount").asText())).isEqualByComparingTo(amount);found=true;}
   assertThat(found).isTrue();
+ }
+
+ @Test @DisplayName("业务生成通知立即可领取，不受应用和数据库时区差异影响")void immediatelyReady(){
+  long scope=customer;CurrentUser.set(new CurrentUser.Identity(actor,Set.of(scope),Set.of("ar:create")));
+  var input=ar(UUID.randomUUID().toString());receivables.create(new ReceivableCreateRequest(input.requestKey(),customer,scope,input.currency(),input.businessType(),input.businessDate(),null,"ready",input.lines()));
+  long id=jdbc.queryForObject("SELECT id FROM oms_ar_outbox WHERE created_by=?",Long.class,actor);
+  assertThat(jdbc.queryForObject("SELECT next_attempt_at<=NOW(6) FROM oms_ar_outbox WHERE id=?",Boolean.class,id)).isTrue();
+  var claimed=leases.claim(new OutboxClaimRequest(scope,UUID.randomUUID().toString(),3,30));assertThat(claimed).isNotNull();assertThat(claimed.id()).isEqualTo(id);
  }
 
 }

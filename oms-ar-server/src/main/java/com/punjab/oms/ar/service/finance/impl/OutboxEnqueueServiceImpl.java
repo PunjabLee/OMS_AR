@@ -2,7 +2,7 @@ package com.punjab.oms.ar.service.finance.impl;
 import com.punjab.oms.ar.service.finance.OutboxEnqueueService;import com.punjab.oms.ar.dao.finance.OutboxDao;import com.punjab.oms.ar.domain.entity.finance.ArOutbox;
 import com.punjab.oms.ar.common.utils.FinanceValues;import com.punjab.oms.ar.base.ServiceException;
 import com.fasterxml.jackson.databind.ObjectMapper;import com.fasterxml.jackson.databind.node.ObjectNode;
-import lombok.RequiredArgsConstructor;import org.springframework.stereotype.Service;import org.springframework.transaction.annotation.*;import java.time.LocalDateTime;
+import lombok.RequiredArgsConstructor;import org.springframework.stereotype.Service;import org.springframework.transaction.annotation.*;
 /** 事件和完整快照同事务入队；任何失败均中止业务提交。 @author Punjab */
 @Service @RequiredArgsConstructor @Transactional(propagation=Propagation.MANDATORY,rollbackFor=Exception.class)
 public class OutboxEnqueueServiceImpl implements OutboxEnqueueService {
@@ -18,7 +18,8 @@ public class OutboxEnqueueServiceImpl implements OutboxEnqueueService {
    catch(Exception e){throw new ServiceException("通知快照解析失败");}
    changes.add(item);
   }
-  var value=values.initialize(new ArOutbox(),actor);value.setEventId(eventId);value.setLegalEntityId(legalEntityId);value.setDestination("FINANCE_EVENTS");value.setPayload(values.json(payload));value.setStatus("PENDING");value.setAttemptCount(0);value.setNextAttemptAt(LocalDateTime.now());value.setVersion(0L);
+  var value=values.initialize(new ArOutbox(),actor);value.setEventId(eventId);value.setLegalEntityId(legalEntityId);value.setDestination("FINANCE_EVENTS");value.setPayload(values.json(payload));value.setStatus("PENDING");value.setAttemptCount(0);value.setVersion(0L);
+  // next_attempt_at使用数据库默认NOW(6)，与领取/重试采用同一时钟。
   if(!dao.create(value))throw new ServiceException("通知入队失败");
  }
 }

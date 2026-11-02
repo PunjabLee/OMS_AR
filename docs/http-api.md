@@ -156,3 +156,19 @@ POST `/api/finance/reconciliation/page`，要求`ar:read`；legalEntityId/custom
 ### 生命周期快照版本2
 
 新事件schemaVersion=2。beforeSnapshot、deltaSnapshot、afterSnapshot内的小数保存为十进制字符串，防止MySQL JSON浮点舍入；整数值仍可为数字，消费方应采用十进制解析并兼容两种表示。历史版本1原样返回。此变更仅影响审计快照，普通应收/核销/开票响应的金额字段保持既有类型。通知队列保存完整事件快照，当前未启用外发。
+
+
+### 通知集成配置（无业务请求入口）
+
+默认不发送。需由部署配置同时设置AR_OUTBOX_ENABLED=true、AR_OUTBOX_SCHEDULING_ENABLED=true，并在受保护配置中提供ar.outbox.receivers按主体映射的url和bearer-token。示意如下，地址为不可解析的示例，不能直接用于部署：
+
+```yaml
+ar:
+  outbox:
+    receivers:
+      1:
+        url: https://receiver.example.invalid/finance/events
+        bearer-token: ${AR_FINANCE_RECEIVER_TOKEN}
+```
+
+接收端按Idempotency-Key去重，持久处理成功后返回2xx。发送原始队列payload而非最新业务状态；通知可能重复、乱序，消费者可结合事件ID和对象版本处理。重定向不跟随，失败按上限重试，耗尽进入DEAD。接收地址及凭据不会经HTTP业务API返回。人工重试与通知查询入口尚在下一细分任务实现。

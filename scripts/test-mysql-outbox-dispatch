@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+"""Run gated schema tests using local credentials without printing them."""
+import os
+import subprocess
+from pathlib import Path
+root = Path(__file__).resolve().parent.parent
+settings = dict(line.split('=', 1) for line in (root / '.env').read_text().splitlines() if line and not line.startswith('#'))
+env = dict(os.environ, AR_TEST_PASSWORD=settings['MYSQL_PASSWORD'])
+raise SystemExit(subprocess.call([str(root / 'scripts/mvn-java21'), '-B', '-Dmaven.repo.local=work/m2', '-pl', 'oms-ar-server', '-Dtest=OutboxDispatchRealTest', '-Dar.outbox-dispatch.real=true', '-Dar.outbox-dispatch.real.commit=true', 'test'], cwd=root, env=env))

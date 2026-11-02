@@ -11,6 +11,9 @@ server:
   port: ${SERVER_PORT:8080}
 
 ar:
+  outbox:
+    enabled: ${AR_OUTBOX_ENABLED:false}
+    scheduling-enabled: ${AR_OUTBOX_SCHEDULING_ENABLED:false}
   invoice:
     exchange-difference-enabled: ${AR_INVOICE_EXCHANGE_DIFFERENCE_ENABLED:false}
   auth:

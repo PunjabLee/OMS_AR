@@ -88,3 +88,14 @@ payload外层schemaVersion=1，包含eventId、legalEntityId、destination、完
 领取和结果确认分别为REQUIRES_NEW/READ_COMMITTED事务。固定SQL用于数据库时间、行锁及CAS，属于DAO规范的明确扩展；DAO本身不开事务。确认必须同时匹配ID、主体、目的地、PROCESSING、租约令牌及未过期时间。过期工作者即使尚无人重领也不能确认。确认成功清空租约；成功保存sent_time，失败按尝试次数进入RETRY或DEAD。仅保存HTTP状态或预定义错误分类，不保存远端正文、异常详情或凭据。通知payload与财务余额不变。
 
 租约只能约束本地状态，不能撤回远端已经处理的请求；接收端仍必须按eventId+destination去重。下一步发送器须在事务外发出请求、限制总超时，并使用超过请求超时的租约。当前租约服务没有HTTP映射，也未开启调度或外发。
+
+
+## 通知发送器（默认关闭）
+
+OutboxDispatchService每轮对每个已配置主体最多领取一条，HTTP在NOT_SUPPORTED方法中执行，领取与确认各自短事务。服务端配置固定HTTPS接收地址，不接受业务请求传入地址，也不跟随3xx重定向。仅显式allow-loopback-http=true时允许本机localhost/127.0.0.1/::1的HTTP，用于本机模拟。URL禁止用户信息、查询串和片段；Bearer凭据只能通过受保护服务端配置加载，不存入队列、VO或日志。运行中不提供配置修改接口，变更接收端需重启服务。
+
+直接发送已存储payload，Content-Type为application/json，Idempotency-Key为ar-{legalEntityId}-{eventId}-{destination}，X-AR-Event-Id为事件ID。接收端必须先持久化处理或去重结果再返回2xx；任一2xx视为成功。3xx/4xx/5xx、网络错误、超时均进入有次数上限的重试。总超时覆盖连接/响应头/完整正文，超时取消请求；租约至少比请求超时长5秒。只记录HTTP状态及TIMEOUT/IO_ERROR/INTERRUPTED等分类，不保存响应正文或异常详情。
+
+默认请求总超时3000毫秒、租约30秒、最大8次、退避5秒倍增至3600秒。退避为min(base*2^(attempt-1),max)，领取耗尽后DEAD。租约或确认失败可能导致重复投递，接收端须按幂等键去重；不保证跨事件顺序或跨系统严格一次，跨实例多个工作者可并发处理。单轮每主体一条、固定延迟执行，不承诺高吞吐；需要更高吞吐可部署多个工作者。
+
+只有ar.outbox.enabled与ar.outbox.scheduling-enabled都为true才注册自动调度；缺少接收端配置的主体保持队列待处理。默认两个开关均false，本项目未配置任何真实接收端。一次调用最多遍历100个主体，各自失败不会阻断其他主体，失败日志仅带主体/事件标识。默认轮间延迟5000毫秒，可配置100至600000毫秒。

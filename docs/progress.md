@@ -203,3 +203,10 @@ Ruling: 入队精度回归发现MySQL JSON将9999999999999999.12345678舍入为1
 验证：8项新测试从空实现红灯转绿，覆盖成功幂等确认、错误令牌、重试延期/耗尽、崩溃过期/耗尽、跳过队首锁、双工作者竞争、范围过滤及参数分类。首次全量因17个测试上下文默认连接池累计耗尽MySQL连接失败，明确错误Too many connections；新增仅src/test/resources/application-pre.yml限制max=5/minIdle=0，生产不变。最终178项实库/HTTP通过（work/outbox-lease-final-real.log），默认26项通过/178项跳过（work/outbox-lease-final-default.log），git diff --check通过。
 
 下一步12c2默认关闭发送器、固定配置、事务外带总超时HTTP、指数退避和本机模拟测试；12c3查询/人工重试。租约只是本地状态保护，不提供远端严格一次保证。
+
+
+任务12c2完成（2026-11-02）：默认关闭的服务端固定HTTPS发送器，逐主体每轮最多一条；NOT_SUPPORTED隔离外层事务，HTTP在租约事务之外执行。禁重定向，固定幂等键及原始payload；总超时同时覆盖响应头和正文，超时取消future。2xx成功，其他HTTP或安全错误分类回写RETRY/DEAD；退避按次数倍增并封顶。双开关才注册自动调度，未配置主体不领取。接收地址不允许userinfo/query/fragment，本机测试HTTP需显式开关；凭据不进队列/日志/响应。
+
+验证：首批7项测试6红后全绿；追加确认丢失重发由模拟接收端按同一键去重、跨主体不发送和拒绝连接，共9项本机HTTP实库测试；3项默认测试验证双开关、URL/凭据边界和有界退避。实库测试同时证明慢正文超时、重定向不带凭据跳转、发送时通知行无持有锁、外层回滚不撤销已提交发送结果。最终187项实库/HTTP通过（work/outbox-dispatch-final-real.log），默认29项通过/187项跳过（work/outbox-dispatch-final-default.log），git diff --check通过。仅连接本机模拟端，没有配置或访问实际外部接收端。
+
+下一步12c3：主体授权的通知分页/详情及有原因、并发版本保护的人工重试，保留操作审计。之后正式版本迁移、本机启动验收与最终全分支审查。

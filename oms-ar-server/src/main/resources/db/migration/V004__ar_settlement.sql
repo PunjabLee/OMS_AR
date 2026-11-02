@@ -1,0 +1,35 @@
+CREATE TABLE oms_ar_settlement (
+ id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ settlement_no VARCHAR(64) NOT NULL,
+ customer_id BIGINT NOT NULL,legal_entity_id BIGINT NOT NULL,currency CHAR(3) NOT NULL,
+ settlement_type VARCHAR(16) NOT NULL,receipt_id BIGINT NULL,
+ amount DECIMAL(24,8) NOT NULL,strategy VARCHAR(32) NOT NULL,
+ preview_fingerprint CHAR(64) NOT NULL,status VARCHAR(16) NOT NULL DEFAULT 'POSTED',
+ reason VARCHAR(500) NOT NULL,version BIGINT NOT NULL DEFAULT 0,
+ created_time DATETIME(6) NOT NULL,created_by VARCHAR(100) NOT NULL,
+ updated_time DATETIME(6) NOT NULL,updated_by VARCHAR(100) NOT NULL,delete_status BOOLEAN NOT NULL DEFAULT FALSE,
+ UNIQUE KEY uk_settlement_no(legal_entity_id,settlement_no),
+ KEY ix_settlement_receipt(receipt_id,status),
+ CONSTRAINT fk_settlement_receipt FOREIGN KEY(receipt_id,customer_id,legal_entity_id,currency) REFERENCES oms_ar_receipt(id,customer_id,legal_entity_id,currency),
+ CONSTRAINT ck_settlement_type CHECK(settlement_type IN ('RECEIPT','OFFSET','BALANCE')),
+ CONSTRAINT ck_settlement_source CHECK((settlement_type='RECEIPT' AND receipt_id IS NOT NULL) OR (settlement_type IN ('OFFSET','BALANCE') AND receipt_id IS NULL)),
+ CONSTRAINT ck_settlement_amount CHECK(amount>0),
+ CONSTRAINT ck_settlement_status CHECK(status IN ('POSTED','REVERSED')),
+ CONSTRAINT ck_settlement_version CHECK(version>=0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+CREATE TABLE oms_ar_settlement_allocation (
+ id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ settlement_id BIGINT NOT NULL,sequence_no INT NOT NULL,
+ positive_line_id BIGINT NOT NULL,negative_line_id BIGINT NULL,
+ amount_type VARCHAR(16) NOT NULL,amount DECIMAL(24,8) NOT NULL,
+ created_time DATETIME(6) NOT NULL,created_by VARCHAR(100) NOT NULL,
+ updated_time DATETIME(6) NOT NULL,updated_by VARCHAR(100) NOT NULL,delete_status BOOLEAN NOT NULL DEFAULT FALSE,
+ UNIQUE KEY uk_allocation_sequence(settlement_id,sequence_no),
+ KEY ix_allocation_positive(positive_line_id,settlement_id),KEY ix_allocation_negative(negative_line_id,settlement_id),
+ CONSTRAINT fk_allocation_settlement FOREIGN KEY(settlement_id) REFERENCES oms_ar_settlement(id),
+ CONSTRAINT fk_allocation_positive FOREIGN KEY(positive_line_id) REFERENCES oms_ar_line(id),
+ CONSTRAINT fk_allocation_negative FOREIGN KEY(negative_line_id) REFERENCES oms_ar_line(id),
+ CONSTRAINT ck_allocation_amount CHECK(amount>0),
+ CONSTRAINT ck_allocation_type CHECK(amount_type IN ('PRINCIPAL','OUTPUT_TAX')),
+ CONSTRAINT ck_allocation_sequence CHECK(sequence_no>0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;

@@ -1,6 +1,8 @@
 # Isolated real-test contexts share one local MySQL instance.
 # Keep idle pools small without changing production datasource settings.
 spring:
+  flyway:
+    enabled: false # Legacy isolated business fixtures; dedicated migration tests use fresh schemas.
   datasource:
     hikari:
       maximum-pool-size: 5

@@ -1,0 +1,122 @@
+CREATE TABLE oms_ar_document (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  doc_no VARCHAR(64) NOT NULL,
+  customer_id BIGINT NOT NULL,
+  legal_entity_id BIGINT NOT NULL,
+  currency CHAR(3) NOT NULL,
+  business_type VARCHAR(32) NOT NULL,
+  generation_mode VARCHAR(16) NOT NULL,
+  business_date DATE NOT NULL,
+  due_date DATE NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
+  version BIGINT NOT NULL DEFAULT 0,
+  void_reason VARCHAR(500) NULL,
+  voided_by VARCHAR(100) NULL,
+  voided_time DATETIME(6) NULL,
+  created_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  created_by VARCHAR(100) NOT NULL,
+  updated_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_by VARCHAR(100) NOT NULL,
+  delete_status BOOLEAN NOT NULL DEFAULT FALSE,
+  PRIMARY KEY(id),
+  UNIQUE KEY uk_document_no(legal_entity_id,doc_no),
+  UNIQUE KEY uk_document_scope(id,customer_id,legal_entity_id,currency),
+  KEY ix_document_customer(legal_entity_id,customer_id,currency,status,due_date),
+  CONSTRAINT ck_document_status CHECK(status IN ('ACTIVE','VOID')),
+  CONSTRAINT ck_document_generation CHECK(generation_mode IN ('UPSTREAM','DIRECT')),
+  CONSTRAINT ck_document_scope CHECK(customer_id>0 AND legal_entity_id>0),
+  CONSTRAINT ck_document_version CHECK(version>=0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+
+CREATE TABLE oms_ar_business_group (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  group_no VARCHAR(64) NOT NULL,
+  customer_id BIGINT NOT NULL,
+  legal_entity_id BIGINT NOT NULL,
+  currency CHAR(3) NOT NULL,
+  business_date DATE NOT NULL,
+  version BIGINT NOT NULL DEFAULT 0,
+  created_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  created_by VARCHAR(100) NOT NULL,
+  updated_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_by VARCHAR(100) NOT NULL,
+  delete_status BOOLEAN NOT NULL DEFAULT FALSE,
+  PRIMARY KEY(id),
+  UNIQUE KEY uk_group_no(legal_entity_id,group_no),
+  UNIQUE KEY uk_group_scope(id,customer_id,legal_entity_id,currency),
+  CONSTRAINT ck_group_scope CHECK(customer_id>0 AND legal_entity_id>0),
+  CONSTRAINT ck_group_version CHECK(version>=0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+
+CREATE TABLE oms_ar_line (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  document_id BIGINT NOT NULL,
+  group_id BIGINT NOT NULL,
+  customer_id BIGINT NOT NULL,
+  legal_entity_id BIGINT NOT NULL,
+  currency CHAR(3) NOT NULL,
+  line_no INT NOT NULL,
+  amount_type VARCHAR(16) NOT NULL,
+  receivable_amount DECIMAL(24,8) NOT NULL,
+  settled_amount DECIMAL(24,8) NOT NULL DEFAULT 0,
+  transferred_amount DECIMAL(24,8) NOT NULL DEFAULT 0,
+  open_amount DECIMAL(24,8) NOT NULL,
+  invoiced_amount DECIMAL(24,8) NOT NULL DEFAULT 0,
+  tax_rate DECIMAL(12,8) NULL,
+  tax_base_amount DECIMAL(24,8) NULL,
+  tax_method VARCHAR(32) NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
+  version BIGINT NOT NULL DEFAULT 0,
+  created_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  created_by VARCHAR(100) NOT NULL,
+  updated_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_by VARCHAR(100) NOT NULL,
+  delete_status BOOLEAN NOT NULL DEFAULT FALSE,
+  PRIMARY KEY(id),
+  UNIQUE KEY uk_line_number(document_id,line_no),
+  KEY ix_line_group(group_id,status,id),
+  CONSTRAINT fk_line_document FOREIGN KEY(document_id,customer_id,legal_entity_id,currency)
+    REFERENCES oms_ar_document(id,customer_id,legal_entity_id,currency),
+  CONSTRAINT fk_line_group FOREIGN KEY(group_id,customer_id,legal_entity_id,currency)
+    REFERENCES oms_ar_business_group(id,customer_id,legal_entity_id,currency),
+  CONSTRAINT ck_line_type CHECK(amount_type IN ('PRINCIPAL','OUTPUT_TAX')),
+  CONSTRAINT ck_line_status CHECK(status IN ('ACTIVE','VOID')),
+  CONSTRAINT ck_line_number CHECK(line_no>0),
+  CONSTRAINT ck_line_version CHECK(version>=0),
+  CONSTRAINT ck_line_tax_rate CHECK(tax_rate IS NULL OR tax_rate>=0),
+  CONSTRAINT ck_line_original CHECK(receivable_amount<>0),
+  CONSTRAINT ck_line_balance CHECK(
+    (status='ACTIVE' AND open_amount=receivable_amount-settled_amount-transferred_amount)
+    OR (status='VOID' AND open_amount=0 AND settled_amount=0 AND transferred_amount=0 AND invoiced_amount=0)),
+  CONSTRAINT ck_line_sign CHECK(
+    (receivable_amount>0 AND settled_amount>=0 AND transferred_amount=0
+      AND open_amount>=0 AND settled_amount<=receivable_amount)
+    OR (receivable_amount<0 AND settled_amount<=0 AND transferred_amount<=0
+      AND open_amount<=0 AND settled_amount+transferred_amount>=receivable_amount))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+
+CREATE TABLE oms_ar_line_source (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  line_id BIGINT NOT NULL,
+  source_system VARCHAR(64) NOT NULL,
+  source_type VARCHAR(64) NOT NULL,
+  source_no VARCHAR(128) NOT NULL,
+  source_id VARCHAR(128) NOT NULL,
+  source_line_id VARCHAR(128) NULL,
+  source_event_id VARCHAR(128) NOT NULL,
+  source_output_key VARCHAR(64) NOT NULL,
+  original_line_id BIGINT NULL,
+  created_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  created_by VARCHAR(100) NOT NULL,
+  updated_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_by VARCHAR(100) NOT NULL,
+  delete_status BOOLEAN NOT NULL DEFAULT FALSE,
+  PRIMARY KEY(id),
+  UNIQUE KEY uk_source_line(line_id),
+  UNIQUE KEY uk_source_event_output(source_system,source_event_id,source_output_key),
+  KEY ix_source_document(source_system,source_type,source_id),
+  CONSTRAINT fk_source_line FOREIGN KEY(line_id) REFERENCES oms_ar_line(id),
+  CONSTRAINT fk_source_original FOREIGN KEY(original_line_id) REFERENCES oms_ar_line(id),
+  CONSTRAINT ck_source_output CHECK(CHAR_LENGTH(source_output_key)>0),
+  CONSTRAINT ck_source_event CHECK(CHAR_LENGTH(source_event_id)>0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;

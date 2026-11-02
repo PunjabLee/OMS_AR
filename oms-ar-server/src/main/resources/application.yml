@@ -1,4 +1,13 @@
 spring:
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-on-migrate: true
+    validate-migration-naming: true
+    fail-on-missing-locations: true
+    baseline-on-migrate: false
+    clean-disabled: true
+    out-of-order: false
   application:
     name: oms-ar
   datasource:

@@ -1,0 +1,35 @@
+CREATE TABLE oms_ar_invoice (
+ id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ source_system VARCHAR(64) NOT NULL,source_id VARCHAR(128) NOT NULL,invoice_no VARCHAR(128) NOT NULL,
+ invoice_date DATE NOT NULL,customer_id BIGINT NOT NULL,legal_entity_id BIGINT NOT NULL,currency CHAR(3) NOT NULL,
+ invoice_kind VARCHAR(8) NOT NULL,original_invoice_id BIGINT NULL,total_amount DECIMAL(24,8) NOT NULL,
+ status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',version BIGINT NOT NULL DEFAULT 0,
+ created_time DATETIME(6) NOT NULL,created_by VARCHAR(100) NOT NULL,
+ updated_time DATETIME(6) NOT NULL,updated_by VARCHAR(100) NOT NULL,delete_status BOOLEAN NOT NULL DEFAULT FALSE,
+ UNIQUE KEY uk_invoice_source(legal_entity_id,source_system,source_id),
+ UNIQUE KEY uk_invoice_scope(id,customer_id,legal_entity_id,currency),
+ UNIQUE KEY uk_invoice_direction(id,invoice_kind),UNIQUE KEY uk_invoice_original(id,original_invoice_id),
+ KEY ix_invoice_customer(legal_entity_id,customer_id,currency,invoice_date,id),KEY ix_invoice_original(original_invoice_id,status),
+ CONSTRAINT fk_invoice_original_scope FOREIGN KEY(original_invoice_id,customer_id,legal_entity_id,currency) REFERENCES oms_ar_invoice(id,customer_id,legal_entity_id,currency),
+ CONSTRAINT ck_invoice_kind CHECK((invoice_kind='BLUE' AND original_invoice_id IS NULL AND total_amount>0) OR (invoice_kind='RED' AND original_invoice_id IS NOT NULL AND total_amount<0)),
+ CONSTRAINT ck_invoice_status CHECK(status IN ('ACTIVE','REVERSED')),CONSTRAINT ck_invoice_version CHECK(version>=0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+CREATE TABLE oms_ar_invoice_allocation (
+ id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ invoice_id BIGINT NOT NULL,invoice_kind VARCHAR(8) NOT NULL,invoice_line_id VARCHAR(128) NOT NULL,
+ receivable_line_id BIGINT NOT NULL,amount_type VARCHAR(16) NOT NULL,amount DECIMAL(24,8) NOT NULL,tax_rate DECIMAL(12,8) NULL,
+ original_invoice_id BIGINT NULL,original_allocation_id BIGINT NULL,
+ original_allocation_key BIGINT GENERATED ALWAYS AS (COALESCE(original_allocation_id,0)) STORED,
+ created_time DATETIME(6) NOT NULL,created_by VARCHAR(100) NOT NULL,
+ updated_time DATETIME(6) NOT NULL,updated_by VARCHAR(100) NOT NULL,delete_status BOOLEAN NOT NULL DEFAULT FALSE,
+ UNIQUE KEY uk_invoice_line_receivable(invoice_id,invoice_line_id,receivable_line_id,original_allocation_key),
+ UNIQUE KEY uk_invoice_allocation_original(id,invoice_id,amount_type),
+ KEY ix_invoice_allocation_receivable(receivable_line_id,invoice_id),KEY ix_invoice_allocation_red(original_allocation_id),
+ CONSTRAINT fk_invoice_allocation_direction FOREIGN KEY(invoice_id,invoice_kind) REFERENCES oms_ar_invoice(id,invoice_kind),
+ CONSTRAINT fk_invoice_allocation_header_original FOREIGN KEY(invoice_id,original_invoice_id) REFERENCES oms_ar_invoice(id,original_invoice_id),
+ CONSTRAINT fk_invoice_allocation_receivable FOREIGN KEY(receivable_line_id) REFERENCES oms_ar_line(id),
+ CONSTRAINT fk_invoice_allocation_original FOREIGN KEY(original_allocation_id,original_invoice_id,amount_type) REFERENCES oms_ar_invoice_allocation(id,invoice_id,amount_type),
+ CONSTRAINT ck_invoice_allocation_type CHECK(amount_type IN ('PRINCIPAL','OUTPUT_TAX')),
+ CONSTRAINT ck_invoice_allocation_rate CHECK((amount_type='PRINCIPAL' AND (tax_rate IS NULL OR tax_rate>=0)) OR (amount_type='OUTPUT_TAX' AND tax_rate IS NOT NULL AND tax_rate>=0)),
+ CONSTRAINT ck_invoice_allocation_direction CHECK((invoice_kind='BLUE' AND amount>0 AND original_invoice_id IS NULL AND original_allocation_id IS NULL) OR (invoice_kind='RED' AND amount<0 AND original_invoice_id IS NOT NULL AND original_allocation_id IS NOT NULL))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;

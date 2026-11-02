@@ -1,0 +1,21 @@
+CREATE TABLE oms_ar_source_guard (
+ id BIGINT NOT NULL AUTO_INCREMENT,
+ legal_entity_id BIGINT NOT NULL,
+ source_key CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ source_system VARCHAR(64) NOT NULL,
+ source_type VARCHAR(64) NOT NULL,
+ source_id VARCHAR(128) NOT NULL,
+ source_line_id VARCHAR(128) NULL,
+ blocked BOOLEAN NOT NULL DEFAULT FALSE,
+ version BIGINT NOT NULL DEFAULT 0,
+ created_time DATETIME(6) NOT NULL,
+ created_by VARCHAR(100) NOT NULL,
+ updated_time DATETIME(6) NOT NULL,
+ updated_by VARCHAR(100) NOT NULL,
+ delete_status BOOLEAN NOT NULL DEFAULT FALSE,
+ PRIMARY KEY(id),
+ UNIQUE KEY uk_source_guard(legal_entity_id,source_key),
+ KEY ix_source_guard_document(legal_entity_id,source_system,source_type,source_id),
+ CONSTRAINT ck_source_guard_scope CHECK(legal_entity_id>0),
+ CONSTRAINT ck_source_guard_version CHECK(version>=0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;

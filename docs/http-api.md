@@ -141,3 +141,5 @@ POST `/api/finance/reconciliation/page`，要求`ar:read`；legalEntityId/custom
 规则：LINE_SETTLED对照有效正负核销分配；LINE_TRANSFERRED对照有效转入批次负额；LINE_INVOICED对照有效蓝红发票分配；RECEIPT_ALLOCATED对照有效收款核销单；ACCOUNT_BALANCE对照有效批次amount-usedAmount；LOT_USED对照有效余额抵扣使用明细；SETTLEMENT_TOTAL核对原核销单与原分配合计；BALANCE_ALLOCATION_USAGE核对每条余额分配与来源批次金额合计。后两项保留对REVERSED历史结构的检查，前六项仅有效业务影响当前投影。
 
 接口不修改任何余额或流水。审计版本快照、关联范围/结构完整性等进一步检查尚在后续任务中，不能将本报告无差异解释为全部数据正确。
+
+对账补充规则：`INVOICE_TOTAL`核对发票单头带符号总额与原始分配合计，含已撤销历史；`INVOICE_RED_EXCESS`以原蓝字分配为对象，storedAmount为有效红字累计绝对金额，expectedAmount为原蓝字分配上限，仅超过上限时报差异。少于上限属于正常部分红冲，不报告。其他关联结构及审计版本检查仍在后续任务中。

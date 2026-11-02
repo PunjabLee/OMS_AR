@@ -171,4 +171,14 @@ ar:
         bearer-token: ${AR_FINANCE_RECEIVER_TOKEN}
 ```
 
-接收端按Idempotency-Key去重，持久处理成功后返回2xx。发送原始队列payload而非最新业务状态；通知可能重复、乱序，消费者可结合事件ID和对象版本处理。重定向不跟随，失败按上限重试，耗尽进入DEAD。接收地址及凭据不会经HTTP业务API返回。人工重试与通知查询入口尚在下一细分任务实现。
+接收端按Idempotency-Key去重，持久处理成功后返回2xx。发送原始队列payload而非最新业务状态；通知可能重复、乱序，消费者可结合事件ID和对象版本处理。重定向不跟随，失败按上限重试，耗尽进入DEAD。接收地址及凭据不会经HTTP业务API返回。通知查询入口见下节，人工重试与操作审计仍在下一细分任务实现。
+
+
+### 通知运营查询
+
+以下接口均需主体授权及独立权限ar:outbox:read，普通ar:read不授权读取通知原文。
+
+- POST /api/finance/notifications/page：对象包含legalEntityId必填；eventId、status、destination可选；page默认1，size默认20、最大200。status为PENDING/PROCESSING/RETRY/SENT/DEAD，destination仅支持FINANCE_EVENTS。按ID倒序，总数和列表使用同一一致快照。
+- GET /api/finance/notifications/detail?id=...&legalEntityId=...：返回notification元数据与payload原始JSON结构，主体不匹配或已删除时不可读取。
+
+元数据包含事件ID、主体、目的地、状态、当前轮尝试次数、下次尝试时间、租约截止时间、成功时间、安全错误分类、版本与创建/更新审计。列表不加载payload，不返回租约令牌；详情不返回租约令牌、接收地址或Bearer凭据。完整payload可能包含同一主体多个客户的业务变化，因此该权限应授予负责主体级集成的运营人员。字段version将供后续人工重试的并发校验使用。

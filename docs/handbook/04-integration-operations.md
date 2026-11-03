@@ -263,7 +263,9 @@ run-local在前台运行，Ctrl-C停止。--check只检查配置/JDK/JAR，不�
 | AR_OUTBOX_ENABLED | false，允许派发 |
 | AR_OUTBOX_SCHEDULING_ENABLED | false，允许自动调度 |
 
-.env按文本KEY=VALUE解析，不执行命令、不展开变量；成对引号可去除，值中的#和=保留。进程环境覆盖.env。数据库root密码不传给应用，不在命令参数中传数据库密码或token。
+启动脚本 `run-local` 按文本读取 `.env`，去除成对的外层引号，保留值中的 `#` 和 `=`。同名配置以进程环境为准。应用通过子进程环境接收数据库密码和令牌，启动脚本会移除数据库 root 密码。
+
+实库验证脚本 `test-mysql-all` 和 `test-mysql-migration` 直接从项目根目录的 `.env` 读取 `MYSQL_PASSWORD`，按第一个等号拆分，外层引号也会成为密码的一部分。启动与验证共用配置时，请写成 `MYSQL_PASSWORD=实际生成的随机值`，等号两侧不加空格，值不加引号。
 
 ## 6. 通知运行及人工重试
 

@@ -169,11 +169,13 @@ erDiagram
 ```mermaid
 erDiagram
     OPERATION_REQUEST ||--o| BUSINESS_RESULT : returns_reference
-    LIFECYCLE_EVENT ||--|{ LIFECYCLE_CHANGE : records
+    LIFECYCLE_EVENT ||--o{ LIFECYCLE_CHANGE : records
     LIFECYCLE_EVENT ||--o{ OUTBOX : publishes
     OUTBOX ||--o{ OUTBOX_RETRY : manual_retries
     OPERATION_REQUEST ||--o| OUTBOX_RETRY : deduplicates
 ```
+
+一个生命周期事件可以有零条或多条变化明细。用新的请求键再次作废已作废的应收单时，系统会记录新的 `RECEIVABLE_VOIDED` 事件。若单据、行和来源状态都没有变化，对应通知中的 `changes` 为 `[]`，接收端应接受该通知。同一请求键、同一内容的重放则返回原结果，不新增事件。
 
 BUSINESS_RESULT是概念节点，不是实际表。operation_request.result_reference依据动作指向不同结果：创建为应收ID、核销为核销ID、转入为批次ID、开票为关联ID、作废为事件ID、人工重试为重试审计ID。调用方应按接口语义解析。
 

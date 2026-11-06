@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;import org.springframework.transac
 public class FinanceJournalServiceImpl implements FinanceJournalService {
  private final com.punjab.oms.ar.common.utils.FinanceSnapshotJson snapshots;
  private final com.punjab.oms.ar.service.finance.OutboxEnqueueService outbox;private final ReceivableDao dao;private final FinanceValues values;
+ /** 校验身份并预留幂等键，比对请求摘要后返回操作凭据。 */
  public JournalTicket begin(JournalBeginRequest request){
   String actor=CurrentUser.require(request.legalEntityId(),request.permission());
   var operation=values.initialize(new ArOperation(),actor);operation.setLegalEntityId(request.legalEntityId());operation.setCallerId(actor);
@@ -22,7 +23,9 @@ public class FinanceJournalServiceImpl implements FinanceJournalService {
   if(locked==null || !hash.equals(locked.getPayloadHash()))throw new ServiceException("同一请求键的内容不一致");
   return new JournalTicket(locked.getId(),locked.getResultReference(),actor,request.legalEntityId());
  }
+ /** 将业务结果引用写入幂等记录，供相同请求重放。 */
  public void complete(JournalTicket ticket,Long result){var operation=new ArOperation();operation.setId(ticket.id());operation.setResultReference(result);operation.setUpdatedBy(ticket.actor());operation.setUpdatedTime(LocalDateTime.now());if(!dao.complete(operation))throw new ServiceException("幂等结果保存失败");}
+ /** 保存事件及对象前后变化，并在同一事务生成待派发通知。 */
  public Long append(JournalEventRequest request,JournalTicket ticket){
   if(!request.actor().equals(ticket.actor()))throw new ServiceException("流水操作人不一致");
   var event=values.initialize(new ArEvent(),request.actor());event.setEventType(request.type());event.setOccurredAt(LocalDateTime.now());event.setRecordedAt(LocalDateTime.now());

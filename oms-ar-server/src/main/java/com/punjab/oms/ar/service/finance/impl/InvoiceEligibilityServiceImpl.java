@@ -8,10 +8,13 @@ public class InvoiceEligibilityServiceImpl implements InvoiceEligibilityService 
  private final InvoiceEligibilityDao dao;private final InvoiceEligibilityConverter converter;private final InvoiceProperties properties;private final FinanceValues values;private final Validator validator;
  /** 税率标准化后的共享额度键；NULL与零税率不同。 @author Punjab */
  private record BucketKey(Long groupId,String amountType,BigDecimal taxRate){}
+ /** 按查询权限读取各业务组的开票额度和明细。 */
  @Override @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
  public InvoiceEligibilityResponse query(InvoiceEligibilityQuery query){return calculate(query,"ar:read");}
+ /** 按开票写权限计算登记时用于校验的共享额度。 */
  @Override @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
  public InvoiceEligibilityResponse forRegistration(InvoiceEligibilityQuery query){return calculate(query,"ar:invoice:write");}
+ /** 在授权范围内按归属组和税率归集有效应收及已开票净额。 */
  private InvoiceEligibilityResponse calculate(InvoiceEligibilityQuery query,String permission){
   if(query==null || !validator.validate(query).isEmpty() || new HashSet<>(query.groupIds()).size()!=query.groupIds().size())throw new ServiceException("开票额度查询范围无效");CurrentUser.require(query.legalEntityId(),permission);
   var bo=converter.toQueryBO(query);if(dao.groups(bo).size()!=query.groupIds().size())throw new ServiceException("业务组不存在或客户、主体、币种不一致");
@@ -33,5 +36,6 @@ public class InvoiceEligibilityServiceImpl implements InvoiceEligibilityService 
   buckets.sort(Comparator.comparingInt((InvoiceEligibilityResponse.Bucket b)->order.get(b.groupId())).thenComparing(InvoiceEligibilityResponse.Bucket::amountType).thenComparing(InvoiceEligibilityResponse.Bucket::taxRate,Comparator.nullsFirst(Comparator.naturalOrder())));
   return new InvoiceEligibilityResponse(buckets,lines,hash(values.json(List.of(query,exchangeEnabled,rows))));
  }
+ /** 对序列化输入计算摘要，用于检测内容变化。 */
  private String hash(String text){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new ServiceException("开票额度摘要生成失败");}}
 }

@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;import org.springframework.transac
  private final ReceivableVoidDao dao;private final FinanceJournalService journal;private final FinanceValues values;private final Validator validator;private final InvoiceProperties invoiceProperties;
  /** 同类型同税率共享额度。 @author Punjab */
  private record Bucket(String type,BigDecimal rate){}
+ /** 按财务权限加载整单及来源，对有效明细统一执行作废。 */
  @Override @Transactional(rollbackFor=Exception.class,isolation=Isolation.READ_COMMITTED)
  public ReceivableVoidResponse voidDocument(ReceivableVoidRequest request){
   validate(request);var ticket=journal.begin(new JournalBeginRequest(request.legalEntityId(),"ar:void","VOID_DOCUMENT",request.requestKey(),values.json(request)));if(ticket.resultReference()!=null)return result(ticket.resultReference());
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;import org.springframework.transac
   for(var s:sources){var guard=guard(request.legalEntityId(),s.getSourceSystem(),s.getSourceType(),s.getSourceId(),s.getSourceLineId(),ticket.actor());guards.put(guard.getSourceKey(),guard);}
   var changes=new ArrayList<JournalEventRequest.Change>();var locked=lockGuards(guards,changes);return execute(ticket,request.legalEntityId(),request.reason(),"FINANCE",selected,locked,changes);
  }
+ /** 按来源系统授权锁定指定来源槽，作废匹配行并阻止迟到生成。 */
  @Override @Transactional(rollbackFor=Exception.class,isolation=Isolation.READ_COMMITTED)
  public ReceivableVoidResponse voidUpstream(UpstreamVoidRequest request){
   validate(request);var ticket=journal.begin(new JournalBeginRequest(request.legalEntityId(),"ar:void:upstream:"+request.sourceSystem(),"VOID_UPSTREAM",request.requestKey(),values.json(request)));if(ticket.resultReference()!=null)return result(ticket.resultReference());
@@ -21,6 +23,7 @@ import org.springframework.stereotype.Service;import org.springframework.transac
   var changes=new ArrayList<JournalEventRequest.Change>();var locked=lockGuards(guards,changes);var selected=new TreeMap<Long,ArLine>();for(var g:locked)for(var line:dao.sourceLines(g))selected.put(line.getId(),line);
   return execute(ticket,request.legalEntityId(),request.reason(),"UPSTREAM",new ArrayList<>(selected.values()),locked,changes);
  }
+ /** 锁定单头、组及明细，验证有效依赖后作废并封锁来源，记录作废事件。 */
  private ReceivableVoidResponse execute(JournalTicket ticket,Long scope,String reason,String mode,List<ArLine> selected,List<ArSourceGuard> guards,List<JournalEventRequest.Change> changes){
   var docs=new TreeMap<Long,ArDocument>();for(var id:selected.stream().map(ArLine::getDocumentId).distinct().sorted().toList()){var doc=dao.document(id,scope,true);if(doc==null)throw new ServiceException("应收单不存在或不可访问");docs.put(id,doc);}
   var groupIds=new TreeSet<Long>();for(var line:selected){groupIds.add(line.getGroupId());var link=dao.adjustment(line.getId());if(link!=null)groupIds.add(link.getRelatedGroupId());}
@@ -41,6 +44,7 @@ import org.springframework.stereotype.Service;import org.springframework.transac
   for(var guard:guards)if(!Boolean.TRUE.equals(guard.getBlocked())){String before=values.json(guard);long version=guard.getVersion();guard.setBlocked(true);guard.setVersion(version+1);touch(guard,ticket.actor());check(dao.blockGuard(guard,version));changes.add(new JournalEventRequest.Change("SOURCE_GUARD",guard.getId(),before,values.json(Map.of("blocked",true)),values.json(guard),version,guard.getVersion()));}
   long event=journal.append(new JournalEventRequest("RECEIVABLE_VOIDED",ticket.actor(),reason,mode,ticket.id().toString(),"void:"+ticket.id(),null,changes),ticket);journal.complete(ticket,event);return result(event);
  }
+ /** 模拟移除目标行后的共享开票净额，阻止扩大额度缺口的作废。 */
  private void checkInvoiceCapacity(List<ArGroup> groups,Set<Long> removing){
   for(var group:groups){Map<Bucket,BigDecimal> before=new HashMap<>(),removed=new HashMap<>();for(var row:dao.invoiceGroup(group)){
    if("EXCHANGE_DIFFERENCE".equals(row.getBusinessType()) && (!invoiceProperties.isExchangeDifferenceEnabled() || row.getExchangeBasisId()==null))continue;
@@ -48,15 +52,21 @@ import org.springframework.stereotype.Service;import org.springframework.transac
   }
   for(var entry:removed.entrySet()){var prior=before.get(entry.getKey());if(prior.subtract(entry.getValue()).compareTo(prior.min(BigDecimal.ZERO))<0)throw new ServiceException("作废将扩大业务组开票额度缺口，请先处理相关开票或调整");}}
  }
+ /** 按稳定身份顺序初始化和锁定来源，形成初始化审计变化。 */
  private List<ArSourceGuard> lockGuards(SortedMap<String,ArSourceGuard> selected,List<JournalEventRequest.Change> changes){
   var locked=new ArrayList<ArSourceGuard>();for(var proposed:selected.values()){boolean initialized=dao.initializeGuard(proposed);var row=dao.lockGuard(proposed.getLegalEntityId(),proposed.getSourceKey());
    if(row==null || Boolean.TRUE.equals(row.getDeleteStatus()) || !proposed.getSourceSystem().equals(row.getSourceSystem()) || !proposed.getSourceType().equals(row.getSourceType()) || !proposed.getSourceId().equals(row.getSourceId()) || !Objects.equals(proposed.getSourceLineId(),row.getSourceLineId()))throw new ServiceException("来源身份锁不一致");
    if(initialized){String snapshot=values.json(row);changes.add(new JournalEventRequest.Change("SOURCE_GUARD",row.getId(),null,snapshot,snapshot,null,0L));}locked.add(row);
   }return locked;
  }
+ /** 按主体及稳定来源身份构建防止迟到生成的锁记录。 */
  private ArSourceGuard guard(Long scope,String system,String type,String id,String line,String actor){var guard=values.initialize(new ArSourceGuard(),actor);guard.setLegalEntityId(scope);guard.setSourceSystem(system);guard.setSourceType(type);guard.setSourceId(id);guard.setSourceLineId(line);guard.setVersion(0L);guard.setBlocked(false);try{guard.setSourceKey(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(values.json(Arrays.asList(system,type,id,line)).getBytes(StandardCharsets.UTF_8))));}catch(Exception e){throw new ServiceException("来源摘要生成失败");}return guard;}
+ /** 从作废事件变化中提取实际受影响的单头和明细标识。 */
  private ReceivableVoidResponse result(Long event){var changes=dao.changes(event);return new ReceivableVoidResponse(event,changes.stream().filter(c->"DOCUMENT".equals(c.getObjectType())).map(ArChange::getObjectId).distinct().sorted().toList(),changes.stream().filter(c->"LINE".equals(c.getObjectType())).map(ArChange::getObjectId).distinct().sorted().toList());}
+ /** 更新变更记录的操作人与时间。 */
  private void touch(ArBaseEntity entity,String actor){entity.setUpdatedBy(actor);entity.setUpdatedTime(LocalDateTime.now());}
+ /** 验证请求对象及字段约束，拒绝无效输入。 */
  private void validate(Object request){if(request==null || !validator.validate(request).isEmpty())throw new ServiceException("作废参数无效，必须填写原因");}
+ /** 持久化或版本条件更新未命中时抛出异常，中止当前业务。 */
  private void check(boolean value){if(!value)throw new ServiceException("作废对象已变化，请重新查询");}
 }

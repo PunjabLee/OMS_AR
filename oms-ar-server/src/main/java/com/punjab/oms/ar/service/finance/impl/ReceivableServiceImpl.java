@@ -29,6 +29,7 @@ public class ReceivableServiceImpl implements ReceivableService {
  private final Validator validator;
  private final com.punjab.oms.ar.common.utils.ExchangeDifferenceCalculator exchangeCalculator;
 
+ /** 先预留请求并锁定稳定来源和关联组，再生成应收、调整及计算依据，原子保存初始化流水和通知。 */
  @Override @Transactional(rollbackFor=Exception.class)
  public Long create(ReceivableCreateRequest request){
   if(request==null || !validator.validate(request).isEmpty())throw new ServiceException("应收创建参数无效");
@@ -131,6 +132,7 @@ public class ReceivableServiceImpl implements ReceivableService {
   locked.setResultReference(document.getId());locked.setUpdatedTime(now);locked.setUpdatedBy(actor);
   persist(dao.complete(locked));return document.getId();
  }
+ /** 逐行验证币种精度、税额依据、汇率差额及业务组引用。 */
  private void validateAmounts(ReceivableCreateRequest request){
   int scale;
   try{scale=Currency.getInstance(request.currency()).getDefaultFractionDigits();}
@@ -153,14 +155,19 @@ public class ReceivableServiceImpl implements ReceivableService {
    groupReferences.put(line.groupKey(),line.groupId());
   }
  }
+ /** 为新建对象填充操作人、时间与逻辑删除标志。 */
  private <T extends ArBaseEntity>T audit(T value,String actor,LocalDateTime now){
   value.setCreatedBy(actor);value.setUpdatedBy(actor);value.setCreatedTime(now);value.setUpdatedTime(now);value.setDeleteStatus(false);return value;
  }
+ /** 保存失败时中止创建事务，避免只生成部分明细。 */
  private void persist(boolean success){if(!success)throw new ServiceException("应收记录保存失败");}
+ /** 为创建事件追加对象初始化变化，保存规范化后的精确快照。 */
  private void snapshot(ArEvent event,String type,ArBaseEntity value,String actor,LocalDateTime now){
   ArChange change=audit(new ArChange(),actor,now);change.setEventId(event.getId());change.setObjectType(type);change.setObjectId(value.getId());
   change.setDeltaSnapshot(snapshots.normalize(serialize(value)));change.setAfterSnapshot(snapshots.normalize(serialize(value)));change.setAfterVersion(0L);persist(dao.createChange(change));
  }
+ /** 按统一序列化规则生成请求摘要或快照的输入。 */
  private String serialize(Object value){try{return json.writeValueAsString(value);}catch(Exception exception){throw new ServiceException("快照序列化失败");}}
+ /** 对序列化输入计算摘要，用于检测内容变化。 */
  private String hash(String value){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));}catch(Exception exception){throw new ServiceException("请求摘要生成失败");}}
 }

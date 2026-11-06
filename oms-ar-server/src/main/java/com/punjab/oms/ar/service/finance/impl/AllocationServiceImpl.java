@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 public class AllocationServiceImpl implements AllocationService {
     private static final BigDecimal LIMIT = new BigDecimal("10000000000000000");
 
+    /** 校验全部候选行，按请求组序在组内先税后价分配，返回分配明细及余款。 */
     @Override
     public AllocationPreviewResponse preview(AllocationPreviewRequest request) {
         if (request == null || request.currencyScale() < 0 || request.currencyScale() > 8
@@ -61,6 +62,7 @@ public class AllocationServiceImpl implements AllocationService {
         return new AllocationPreviewResponse(result, remaining);
     }
 
+    /** 验证金额非负、未超储存范围且符合币种小数位。 */
     private void validateMoney(BigDecimal amount, int scale) {
         if (amount == null || amount.signum() < 0 || amount.compareTo(LIMIT) >= 0) {
             throw new ServiceException("核销金额或目标余额无效");

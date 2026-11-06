@@ -13,6 +13,7 @@ import jakarta.validation.Validator;import lombok.RequiredArgsConstructor;import
 @Service @RequiredArgsConstructor
 public class ReceiptServiceImpl implements ReceiptService {
  private final ReceiptDao dao;private final ReceiptConverter converter;private final FinanceJournalService journal;private final FinanceValues values;private final Validator validator;
+ /** 核验实收金额与来源，初始化未分配收款，并将登记流水和幂等结果一并提交。 */
  @Transactional(rollbackFor=Exception.class)
  public Long create(ReceiptCreateRequest request){
   if(request==null || !validator.validate(request).isEmpty())throw new ServiceException("收款参数无效");
@@ -25,6 +26,7 @@ public class ReceiptServiceImpl implements ReceiptService {
   journal.append(new JournalEventRequest("RECEIPT_CREATED",ticket.actor(),"收款登记",request.sourceSystem(),request.sourceId(),"receipt:"+ticket.id(),null,List.of(new JournalEventRequest.Change("RECEIPT",receipt.getId(),null,snapshot,snapshot,null,0L))),ticket);
   journal.complete(ticket,receipt.getId());return receipt.getId();
  }
+ /** 校验主体读权限，返回实收原额、已分配额及当前可用额。 */
  public ReceiptResponse detail(ReceiptDetailQuery query){
   if(query==null || !validator.validate(query).isEmpty())throw new ServiceException("收款查询参数无效");
   CurrentUser.require(query.legalEntityId(),"ar:read");var receipt=dao.detail(converter.toDetailQueryBO(query));if(receipt==null)throw new ServiceException("收款不存在或不可访问");return converter.toResponse(receipt);

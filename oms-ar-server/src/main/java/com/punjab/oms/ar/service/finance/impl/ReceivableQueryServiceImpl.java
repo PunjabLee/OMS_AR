@@ -22,6 +22,7 @@ public class ReceivableQueryServiceImpl implements ReceivableQueryService {
  private final ReceivableDao dao;
  private final ReceivableConverter converter;
  private final Validator validator;
+ /** 在同一快照读取单头、来源、调整与汇率依据，逐行判断结算程度并分别汇总价税。 */
  @Override @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
  public ReceivableResponse detail(ReceivableDetailQuery query){
   validate(query);CurrentUser.require(query.legalEntityId(),"ar:read");
@@ -40,13 +41,16 @@ public class ReceivableQueryServiceImpl implements ReceivableQueryService {
   else state="UNSETTLED";
   return new ReceivableResponse(converter.toResponse(document),state,result,sum(lines,"PRINCIPAL"),sum(lines,"OUTPUT_TAX"));
  }
+ /** 将主体及单据筛选条件转为内部查询，在一致快照中返回单头分页。 */
  @Override @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
  public PageResult<ReceivableResponse.Document> page(ReceivablePageQuery query){
   validate(query);CurrentUser.require(query.getLegalEntityId(),"ar:read");
   var result=dao.page(converter.toPageQueryBO(query));
   return new PageResult<>(result.total(),result.page(),result.size(),result.records().stream().map(converter::toResponse).toList());
  }
+ /** 验证请求对象及字段约束，拒绝无效输入。 */
  private void validate(Object query){if(query==null || !validator.validate(query).isEmpty())throw new ServiceException("查询参数无效");}
+ /** 按价款或销项税分别累计原额、核销、转出、余额和开票金额。 */
  private Amounts sum(List<ArLine> lines,String type){
   BigDecimal original=BigDecimal.ZERO,settled=BigDecimal.ZERO,transferred=BigDecimal.ZERO,open=BigDecimal.ZERO,invoiced=BigDecimal.ZERO;
   for(var line:lines){

@@ -3,5 +3,6 @@ import com.punjab.oms.ar.service.finance.SettlementQueryService;import com.punja
 /** 先授权单头，再在一致快照中查询其分配和批次。 @author Punjab */
 @Service @RequiredArgsConstructor public class SettlementQueryServiceImpl implements SettlementQueryService {
  private final SettlementQueryDao dao;private final SettlementQueryConverter converter;private final Validator validator;
+ /** 读取核销单和原始分配，同时返回余额抵扣使用的账户及批次。 */
  @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ) public SettlementResponse detail(SettlementDetailQuery query){if(query==null || !validator.validate(query).isEmpty())throw new ServiceException("核销详情参数无效");CurrentUser.require(query.legalEntityId(),"ar:read");var header=dao.detail(converter.toDetailQueryBO(query));if(header==null)throw new ServiceException("核销单不存在或不可访问");var balance=dao.balance(header.getId());return new SettlementResponse(converter.toResponse(header),balance==null?null:balance.getAccountId(),dao.allocations(header.getId()).stream().map(converter::toResponse).toList(),dao.usages(header.getId()).stream().map(converter::toResponse).toList());}
 }

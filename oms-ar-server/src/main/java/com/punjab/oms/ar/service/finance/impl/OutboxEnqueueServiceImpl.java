@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;import org.springframework.stereotype.Serv
 @Service @RequiredArgsConstructor @Transactional(propagation=Propagation.MANDATORY,rollbackFor=Exception.class)
 public class OutboxEnqueueServiceImpl implements OutboxEnqueueService {
  private final OutboxDao dao;private final FinanceValues values;private final ObjectMapper json;
+ /** 读取完整业务事件与快照，生成固定目的地的待投递记录。 */
  public void enqueue(Long eventId,Long legalEntityId,String actor){
   if(eventId==null || legalEntityId==null || legalEntityId<=0 || actor==null || actor.isBlank())throw new ServiceException("通知上下文无效");
   var event=dao.event(eventId);if(event==null || !actor.equals(event.getActor()))throw new ServiceException("通知事件不存在或操作人不一致");

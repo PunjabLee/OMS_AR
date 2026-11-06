@@ -32,10 +32,12 @@ public class SettlementServiceImpl implements SettlementService {
  /** 当前余额及对应预览，仅在当前调用内有效。 @author Punjab */
  private record State(ArReceipt receipt,List<ArLine> lines,SettlementPreviewResponse view){}
 
+ /** 读取收款及目标组的有效正数行，计算税后价分配和确认指纹。 */
  @Override @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
  public SettlementPreviewResponse preview(SettlementPreviewRequest request){
   validate(request);CurrentUser.require(request.legalEntityId(),"ar:settle");return load(request,false).view();
  }
+ /** 重新读取并锁定分配依据，核对预览指纹后写核销单、分配、余额变化及流水。 */
  @Override @Transactional(rollbackFor=Exception.class)
  public Long confirm(SettlementConfirmRequest request){
   validate(request);
@@ -62,6 +64,7 @@ public class SettlementServiceImpl implements SettlementService {
   journal.append(new JournalEventRequest("RECEIPT_SETTLED",ticket.actor(),request.reason(),"SETTLEMENT",settlement.getId().toString(),"settlement:"+ticket.id(),null,changes),ticket);
   journal.complete(ticket,settlement.getId());return settlement.getId();
  }
+ /** 余额核销转交批次恢复流程，其余按原分配恢复正负应收及收款可用额。 */
  @Override @Transactional(rollbackFor=Exception.class)
  public Long reverse(SettlementReverseRequest request){
   validate(request);CurrentUser.require(request.legalEntityId(),"ar:reverse");
@@ -103,6 +106,7 @@ public class SettlementServiceImpl implements SettlementService {
   journal.append(new JournalEventRequest("SETTLEMENT_REVERSED",ticket.actor(),request.reason(),"SETTLEMENT",settlement.getId().toString(),"reverse:"+ticket.id(),originalEvent,changes),ticket);
   journal.complete(ticket,settlement.getId());return settlement.getId();
  }
+ /** 加载当前业务对象及关联分配依据，按调用模式锁定并计算预览。 */
  private State load(SettlementPreviewRequest request,boolean lock){
   if(new HashSet<>(request.groupIds()).size()!=request.groupIds().size())throw new ServiceException("业务组不能重复选择");
   var receipt=dao.receipt(request.receiptId(),request.legalEntityId(),lock);if(receipt==null)throw new ServiceException("收款不存在或不可访问");
@@ -116,9 +120,11 @@ public class SettlementServiceImpl implements SettlementService {
   Map<Long,Long> versions=lines.stream().collect(Collectors.toMap(ArLine::getId,ArLine::getVersion));
   return new State(receipt,lines,new SettlementPreviewResponse(receipt.getVersion(),versions,allocated.allocations(),request.amount().subtract(allocated.unallocatedAmount()),allocated.unallocatedAmount(),fingerprint));
  }
+ /** 核对所选业务组数量以及客户、主体和结算币种。 */
  private void checkGroups(List<ArGroup> groups,List<Long> ids,ArReceipt receipt){
   if(groups.size()!=ids.size() || groups.stream().anyMatch(group->!receipt.getCustomerId().equals(group.getCustomerId()) || !receipt.getCurrency().equals(group.getCurrency())))throw new ServiceException("业务组不存在或客户、币种不一致");
  }
+ /** 更新应收行金额和版本，校验方向及边界后返回审计变化。 */
  private JournalEventRequest.Change moveLine(ArLine line,BigDecimal amount,String actor){
   if(line==null || !"ACTIVE".equals(line.getStatus()))throw new ServiceException("应收明细不可核销");
   String before=values.json(line);long version=line.getVersion();
@@ -127,15 +133,21 @@ public class SettlementServiceImpl implements SettlementService {
   line.setSettledAmount(settled);line.setOpenAmount(open);line.setVersion(version+1);touch(line,actor);check(dao.updateLine(line,version));
   return new JournalEventRequest.Change("LINE",line.getId(),before,values.json(Map.of("settledAmount",amount,"openAmount",amount.negate())),values.json(line),version,line.getVersion());
  }
+ /** 按本次分配或撤销增量更新实收的已分配额和版本。 */
  private JournalEventRequest.Change moveReceipt(ArReceipt receipt,BigDecimal amount,String actor){
   String before=values.json(receipt);long version=receipt.getVersion();var allocated=receipt.getAllocatedAmount().add(amount);
   if(allocated.signum()<0 || allocated.compareTo(receipt.getAmount())>0)throw new ServiceException("收款余额不足或反核销金额不一致");
   receipt.setAllocatedAmount(allocated);receipt.setVersion(version+1);touch(receipt,actor);check(dao.updateReceipt(receipt,version));
   return new JournalEventRequest.Change("RECEIPT",receipt.getId(),before,values.json(Map.of("allocatedAmount",amount)),values.json(receipt),version,receipt.getVersion());
  }
+ /** 为新增业务对象生成初始化快照，前态为空。 */
  private JournalEventRequest.Change initial(String type,ArBaseEntity value){String json=values.json(value);return new JournalEventRequest.Change(type,value.getId(),null,json,json,null,0L);}
+ /** 更新变更记录的操作人与时间。 */
  private void touch(ArBaseEntity value,String actor){value.setUpdatedBy(actor);value.setUpdatedTime(LocalDateTime.now());}
+ /** 验证请求对象及字段约束，拒绝无效输入。 */
  private void validate(Object request){if(request==null || !validator.validate(request).isEmpty())throw new ServiceException("核销请求参数无效");}
+ /** 持久化或版本条件更新未命中时抛出异常，中止当前业务。 */
  private void check(boolean value){if(!value)throw new ServiceException("余额已变化，请刷新后重试");}
+ /** 对序列化输入计算摘要，用于检测内容变化。 */
  private String hash(String value){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new ServiceException("预览摘要计算失败");}}
 }

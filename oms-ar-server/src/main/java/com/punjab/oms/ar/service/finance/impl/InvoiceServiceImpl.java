@@ -12,8 +12,10 @@ public class InvoiceServiceImpl implements InvoiceService {
  private record Selection(String externalLine,Long lineId,Long originalId){}
  /** 与开票额度查询相同的共享额度键。 @author Punjab */
  private record Bucket(Long groupId,String amountType,BigDecimal rate){}
+ /** 按蓝字共享额度或红字原分配上限校验请求，返回登记用指纹。 */
  @Override @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
  public InvoicePreviewResponse preview(InvoicePreviewRequest request){validate(request);CurrentUser.require(request.legalEntityId(),"ar:invoice:write");return load(request,false).view();}
+ /** 重验指纹和行级、组级额度，写入发票关联、逐行分配及已开票金额变化。 */
  @Override @Transactional(rollbackFor=Exception.class,isolation=Isolation.READ_COMMITTED)
  public Long register(InvoiceRegisterRequest request){
   validate(request);var ticket=journal.begin(new JournalBeginRequest(request.preview().legalEntityId(),"ar:invoice:write","INVOICE_REGISTER",request.requestKey(),values.json(request)));if(ticket.resultReference()!=null)return ticket.resultReference();
@@ -26,6 +28,7 @@ public class InvoiceServiceImpl implements InvoiceService {
   var rows=state.sources().stream().collect(Collectors.toMap(ArLine::getId,Function.identity()));for(var entry:deltas.entrySet())changes.add(move(rows.get(entry.getKey()),entry.getValue(),ticket.actor()));
   journal.append(new JournalEventRequest("INVOICE_REGISTERED",ticket.actor(),request.reason(),"INVOICE",invoice.getId().toString(),"invoice:"+ticket.id(),null,changes),ticket);journal.complete(ticket,invoice.getId());return invoice.getId();
  }
+ /** 先检查原蓝字与有效红字依赖，按原发票分配冲回已开票金额并登记逆向事件。 */
  @Override @Transactional(rollbackFor=Exception.class,isolation=Isolation.READ_COMMITTED)
  public Long reverse(InvoiceReverseRequest request){
   validate(request);var ticket=journal.begin(new JournalBeginRequest(request.legalEntityId(),"ar:reverse","INVOICE_REVERSE",request.requestKey(),values.json(request)));if(ticket.resultReference()!=null)return ticket.resultReference();
@@ -44,11 +47,13 @@ public class InvoiceServiceImpl implements InvoiceService {
   Long originalEvent=dao.postedEvent(invoice.getId());if(originalEvent==null)throw new ServiceException("原开票关联事件缺失");
   journal.append(new JournalEventRequest("INVOICE_REVERSED",ticket.actor(),request.reason(),"INVOICE",invoice.getId().toString(),"invoice-reverse:"+ticket.id(),originalEvent,changes),ticket);journal.complete(ticket,invoice.getId());return invoice.getId();
  }
+ /** 读取发票头及原分配，对有效蓝字扣除已红冲金额，返回逐项可红余额。 */
  @Override @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
  public InvoiceResponse detail(InvoiceDetailQuery query){
   validate(query);CurrentUser.require(query.legalEntityId(),"ar:read");var invoice=dao.detail(converter.toDetailQueryBO(query));if(invoice==null)throw new ServiceException("发票关联不存在或不可访问");var allocations=dao.allocations(invoice.getId());Map<Long,BigDecimal> red=redAmounts(dao.activeRedAllocations(invoice.getId()));boolean blue="BLUE".equals(invoice.getInvoiceKind()) && "ACTIVE".equals(invoice.getStatus());
   return new InvoiceResponse(converter.toResponse(invoice),allocations.stream().map(a->converter.toResponse(a,blue?a.getAmount().add(red.getOrDefault(a.getId(),BigDecimal.ZERO)):null)).toList());
  }
+ /** 加载当前业务对象及关联分配依据，按调用模式锁定并计算预览。 */
  private State load(InvoicePreviewRequest request,boolean lock){
   boolean red=request.kind()==InvoiceKind.RED;if(red!=(request.originalInvoiceId()!=null) || request.totalAmount().signum()!=(red?-1:1))throw new ServiceException("发票方向、金额或原蓝字引用无效");values.positiveMoney(request.currency(),request.totalAmount().abs());
   ArInvoice original=null;List<ArInvoiceAllocation> originalAllocations=List.of(),priorRed=List.of();List<ArInvoiceEligibilityLine> originalSources=List.of();
@@ -80,19 +85,29 @@ public class InvoiceServiceImpl implements InvoiceService {
   else for(var entry:originalTotals.entrySet()){var remaining=originals.get(entry.getKey()).getAmount().add(redUsed.getOrDefault(entry.getKey(),BigDecimal.ZERO));if(remaining.signum()<0 || entry.getValue().compareTo(remaining)>0)throw new ServiceException("超过原蓝字分配剩余可红字金额");}
   String fingerprint=hash(values.json(Arrays.asList(request,quota.fingerprint(),original,originalAllocations,priorRed,originalSources)));return new State(rows,new InvoicePreviewResponse(request.kind(),total,result,fingerprint));
  }
+ /** 确定开票归属组并在写入时锁组，再读取应收行校验状态。 */
  private List<ArInvoiceEligibilityLine> lockedSources(List<Long> ids,Long scope,Long customer,String currency,boolean lock){
   var rows=dao.sources(ids,scope);checkSources(rows,ids,customer,currency);var groups=rows.stream().map(ArInvoiceEligibilityLine::getInvoiceGroupId).distinct().sorted().toList();
   if(lock){var locked=dao.lockGroups(groups,scope);if(locked.size()!=groups.size() || locked.stream().anyMatch(g->!customer.equals(g.getCustomerId()) || !currency.equals(g.getCurrency())))throw new ServiceException("开票业务组不存在或范围不一致");rows=dao.sources(ids,scope);checkSources(rows,ids,customer,currency);if(!groups.equals(rows.stream().map(ArInvoiceEligibilityLine::getInvoiceGroupId).distinct().sorted().toList()))throw new ServiceException("应收开票归属已变化");}return rows;
  }
+ /** 核对开票源行完整性和结算范围。 */
  private void checkSources(List<ArInvoiceEligibilityLine> rows,List<Long> ids,Long customer,String currency){if(rows.size()!=ids.size() || rows.stream().anyMatch(r->!customer.equals(r.getCustomerId()) || !currency.equals(r.getCurrency())))throw new ServiceException("应收不存在、已作废或结算范围不一致");}
+ /** 按原蓝字分配累计有效红字金额，供校验剩余可红额度。 */
  private Map<Long,BigDecimal> redAmounts(List<ArInvoiceAllocation> rows){Map<Long,BigDecimal> result=new HashMap<>();for(var row:rows)result.merge(row.getOriginalAllocationId(),row.getAmount(),BigDecimal::add);return result;}
+ /** 用开票归属组、金额性质和规范化税率构造共享额度键。 */
  private Bucket bucket(Long group,String type,BigDecimal rate){return new Bucket(group,type,rate==null?null:rate.stripTrailingZeros());}
+ /** 按蓝红分配或撤销增量更新已开票金额，保留结算余额并记录变化。 */
  private JournalEventRequest.Change move(ArLine line,BigDecimal amount,String actor){
   String before=values.json(line);long version=line.getVersion();var invoiced=line.getInvoicedAmount().add(amount);if(invoiced.abs().compareTo(line.getReceivableAmount().abs())>0 || (invoiced.signum()!=0 && invoiced.signum()!=line.getReceivableAmount().signum()))throw new ServiceException("应收已开票金额方向或额度不一致");line.setInvoicedAmount(invoiced);line.setVersion(version+1);touch(line,actor);check(dao.updateLine(line,version));return new JournalEventRequest.Change("LINE",line.getId(),before,values.json(Map.of("invoicedAmount",amount)),values.json(line),version,line.getVersion());
  }
+ /** 为新增业务对象生成初始化快照，前态为空。 */
  private JournalEventRequest.Change initial(String type,ArBaseEntity value){String json=values.json(value);return new JournalEventRequest.Change(type,value.getId(),null,json,json,null,0L);}
+ /** 更新变更记录的操作人与时间。 */
  private void touch(ArBaseEntity value,String actor){value.setUpdatedBy(actor);value.setUpdatedTime(LocalDateTime.now());}
+ /** 验证请求对象及字段约束，拒绝无效输入。 */
  private void validate(Object request){if(request==null || !validator.validate(request).isEmpty())throw new ServiceException("发票关联参数无效");}
+ /** 持久化或版本条件更新未命中时抛出异常，中止当前业务。 */
  private void check(boolean success){if(!success)throw new ServiceException("发票关联或余额已变化，请重新查询");}
+ /** 对序列化输入计算摘要，用于检测内容变化。 */
  private String hash(String text){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new ServiceException("开票预览摘要失败");}}
 }

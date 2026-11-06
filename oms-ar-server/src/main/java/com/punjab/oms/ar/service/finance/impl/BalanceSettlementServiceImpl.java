@@ -9,8 +9,10 @@ public class BalanceSettlementServiceImpl implements BalanceSettlementService {
  private final AllocationService allocator;private final FinanceJournalService journal;private final FinanceValues values;private final Validator validator;
  /** 当前预览对应的事务内对象。 @author Punjab */
  private record State(ArCustomerAccount account,List<ArBalanceLot> lots,List<ArLine> lines,BalanceSettlementPreviewResponse view){}
+ /** 先计算目标组的应收分配，再按批次先进先出拆分来源，返回预览指纹。 */
  @Override @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
  public BalanceSettlementPreviewResponse preview(BalanceSettlementPreviewRequest request){validate(request);CurrentUser.require(request.legalEntityId(),"ar:settle");return load(request,false).view();}
+ /** 重新读取并锁定分配依据，核对预览指纹后写核销单、分配、余额变化及流水。 */
  @Override @Transactional(rollbackFor=Exception.class)
  public Long confirm(BalanceSettlementConfirmRequest request){
   validate(request);var ticket=journal.begin(new JournalBeginRequest(request.preview().legalEntityId(),"ar:settle","BALANCE_SETTLEMENT_CONFIRM",request.requestKey(),values.json(request)));if(ticket.resultReference()!=null)return ticket.resultReference();
@@ -33,6 +35,7 @@ public class BalanceSettlementServiceImpl implements BalanceSettlementService {
   changes.add(moveAccount(account,view.usedAmount().negate(),ticket.actor()));
   journal.append(new JournalEventRequest("BALANCE_SETTLED",ticket.actor(),request.reason(),"SETTLEMENT",settlement.getId().toString(),"balance-settle:"+ticket.id(),null,changes),ticket);journal.complete(ticket,settlement.getId());return settlement.getId();
  }
+ /** 逐笔核对原核销分配与批次使用额，将额度退还原批次和账户并恢复应收。 */
  @Override @Transactional(rollbackFor=Exception.class)
  public Long reverse(SettlementReverseRequest request){
   validate(request);var ticket=journal.begin(new JournalBeginRequest(request.legalEntityId(),"ar:reverse","SETTLEMENT_REVERSE",request.requestKey(),values.json(request)));if(ticket.resultReference()!=null)return ticket.resultReference();
@@ -63,6 +66,7 @@ public class BalanceSettlementServiceImpl implements BalanceSettlementService {
   Long original=settlements.postedEvent(settlement.getId());if(original==null)throw new ServiceException("原核销事件缺失");
   journal.append(new JournalEventRequest("SETTLEMENT_REVERSED",ticket.actor(),request.reason(),"SETTLEMENT",settlement.getId().toString(),"reverse:"+ticket.id(),original,changes),ticket);journal.complete(ticket,settlement.getId());return settlement.getId();
  }
+ /** 加载当前业务对象及关联分配依据，按调用模式锁定并计算预览。 */
  private State load(BalanceSettlementPreviewRequest request,boolean lock){
   if(new HashSet<>(request.groupIds()).size()!=request.groupIds().size())throw new ServiceException("业务组不能重复选择");
   var account=balances.account(request.accountId(),request.legalEntityId(),lock);if(account==null)throw new ServiceException("客户信用账户不存在或不可访问");values.positiveMoney(account.getCurrency(),request.amount());
@@ -86,21 +90,30 @@ public class BalanceSettlementServiceImpl implements BalanceSettlementService {
   String fingerprint=hash(values.json(List.of(request,account,lots,lines)));
   return new State(account,lots,lines,new BalanceSettlementPreviewResponse(account.getVersion(),allocated.allocations(),lotAllocations,request.amount().subtract(allocated.unallocatedAmount()),allocated.unallocatedAmount(),fingerprint));
  }
+ /** 核对所选业务组数量以及客户、主体和结算币种。 */
  private void checkGroups(List<ArGroup> groups,List<Long> ids,ArCustomerAccount account){if(groups.size()!=ids.size() || groups.stream().anyMatch(g->!account.getCustomerId().equals(g.getCustomerId()) || !account.getCurrency().equals(g.getCurrency())))throw new ServiceException("业务组不存在或客户、币种不一致");}
+ /** 更新应收行金额和版本，校验方向及边界后返回审计变化。 */
  private JournalEventRequest.Change moveLine(ArLine line,BigDecimal amount,String actor){
   if(line==null || !"ACTIVE".equals(line.getStatus()) || line.getReceivableAmount().signum()<=0)throw new ServiceException("应收明细不可核销");
   String before=values.json(line);long version=line.getVersion();var settled=line.getSettledAmount().add(amount);var open=line.getOpenAmount().subtract(amount);if(settled.signum()<0 || open.signum()<0)throw new ServiceException("应收余额不足或原分配不一致");
   line.setSettledAmount(settled);line.setOpenAmount(open);line.setVersion(version+1);touch(line,actor);check(settlements.updateLine(line,version));return new JournalEventRequest.Change("LINE",line.getId(),before,values.json(Map.of("settledAmount",amount,"openAmount",amount.negate())),values.json(line),version,line.getVersion());
  }
+ /** 校验有效批次的使用额处于原额范围内，更新占用及版本。 */
  private JournalEventRequest.Change moveLot(ArBalanceLot lot,BigDecimal amount,String actor){
   String before=values.json(lot);long version=lot.getVersion();var used=lot.getUsedAmount().add(amount);if(!"ACTIVE".equals(lot.getStatus()) || used.signum()<0 || used.compareTo(lot.getAmount())>0)throw new ServiceException("来源批次余额不足或原分配不一致");lot.setUsedAmount(used);lot.setVersion(version+1);touch(lot,actor);check(balances.updateLot(lot,version));return new JournalEventRequest.Change("BALANCE_LOT",lot.getId(),before,values.json(Map.of("usedAmount",amount)),values.json(lot),version,lot.getVersion());
  }
+ /** 校验信用余额不会变负，按版本更新账户并记录金额增量。 */
  private JournalEventRequest.Change moveAccount(ArCustomerAccount account,BigDecimal amount,String actor){
   String before=values.json(account);long version=account.getVersion();var balance=account.getBalanceAmount().add(amount);if(balance.signum()<0)throw new ServiceException("客户信用余额不足");account.setBalanceAmount(balance);account.setVersion(version+1);touch(account,actor);check(balances.updateAccount(account,version));return new JournalEventRequest.Change("CUSTOMER_ACCOUNT",account.getId(),before,values.json(Map.of("balanceAmount",amount)),values.json(account),version,account.getVersion());
  }
+ /** 为新增业务对象生成初始化快照，前态为空。 */
  private JournalEventRequest.Change initial(String type,ArBaseEntity value){String json=values.json(value);return new JournalEventRequest.Change(type,value.getId(),null,json,json,null,0L);}
+ /** 更新变更记录的操作人与时间。 */
  private void touch(ArBaseEntity value,String actor){value.setUpdatedBy(actor);value.setUpdatedTime(LocalDateTime.now());}
+ /** 验证请求对象及字段约束，拒绝无效输入。 */
  private void validate(Object request){if(request==null || !validator.validate(request).isEmpty())throw new ServiceException("余额核销请求参数无效");}
+ /** 持久化或版本条件更新未命中时抛出异常，中止当前业务。 */
  private void check(boolean ok){if(!ok)throw new ServiceException("余额已变化，请重试");}
+ /** 对序列化输入计算摘要，用于检测内容变化。 */
  private String hash(String text){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new ServiceException("预览摘要计算失败");}}
 }

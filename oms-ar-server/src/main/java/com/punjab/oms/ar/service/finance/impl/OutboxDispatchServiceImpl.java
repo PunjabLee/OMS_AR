@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;import org.springframework.transac
 /** 每轮每个配置主体最多领取一条；HTTP位于所有业务事务之外。 @author Punjab */
 @Service @RequiredArgsConstructor @Slf4j public class OutboxDispatchServiceImpl implements OutboxDispatchService {
  private final OutboxProperties properties;private final OutboxLeaseService leases;private final FinanceNotificationClient client;
+ /** 逐主体领取到期通知，在事务外发送后按租约确认结果或安排重试。 */
  @Transactional(propagation=Propagation.NOT_SUPPORTED)
  public int dispatchOnce(){
   if(!properties.isEnabled())return 0;properties.validate();int claimed=0;

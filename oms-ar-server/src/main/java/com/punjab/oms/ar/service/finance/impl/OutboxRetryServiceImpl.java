@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;import org.springframework.transac
 /** 重试操作、前后状态审计和幂等结果同事务提交，不追加财务通知事件。 @author Punjab */
 @Service @RequiredArgsConstructor public class OutboxRetryServiceImpl implements OutboxRetryService {
  private final OutboxRetryDao dao;private final FinanceJournalService journal;private final FinanceValues values;private final OutboxRetryConverter converter;private final Validator validator;
+ /** 核对失败通知状态及版本，重置尝试次数并记录人工重试审计。 */
  @Transactional(rollbackFor=Exception.class,isolation=Isolation.READ_COMMITTED)
  public Long retry(OutboxRetryRequest request){
   validate(request);var ticket=journal.begin(new JournalBeginRequest(request.legalEntityId(),"ar:outbox:retry","OUTBOX_RETRY",request.requestKey(),values.json(request)));
@@ -18,7 +19,9 @@ import org.springframework.stereotype.Service;import org.springframework.transac
   audit.setAfterStatus(after.getStatus());audit.setAfterAttemptCount(after.getAttemptCount());audit.setAfterNextAttemptAt(after.getNextAttemptAt());audit.setAfterVersion(after.getVersion());
   if(!dao.create(audit))throw new ServiceException("通知重试审计保存失败");journal.complete(ticket,audit.getId());return audit.getId();
  }
+ /** 校验通知归属后分页读取人工重试的前后状态。 */
  @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
  public PageResult<OutboxRetryResponse> history(OutboxRetryPageQuery query){validate(query);CurrentUser.require(query.getLegalEntityId(),"ar:outbox:read");if(dao.notification(query.getOutboxId(),query.getLegalEntityId(),false)==null)throw new ServiceException("通知不存在或不可访问");var page=dao.history(converter.toPageQueryBO(query));return new PageResult<>(page.total(),page.page(),page.size(),page.records().stream().map(converter::toResponse).toList());}
+ /** 验证请求对象及字段约束，拒绝无效输入。 */
  private void validate(Object value){if(value==null || !validator.validate(value).isEmpty())throw new ServiceException("通知重试参数无效");}
 }

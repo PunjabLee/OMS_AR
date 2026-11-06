@@ -89,6 +89,8 @@ Controller不依赖DAO或Entity；Service接口不暴露Entity；Query必须转�
 
 ## 3. 数据模型：实际21张表
 
+完整关系及复合外键列序见[数据实体 ER 图册](05-entity-relationships.md)。
+
 下表省略统一前缀`oms_ar_`。正式文件位于[db/migration](../../oms-ar-server/src/main/resources/db/migration)。金额DECIMAL(24,8)、税率DECIMAL(12,8)、汇率DECIMAL(24,12)；业务金额还需符合币种实际小数位。每表主键为BIGINT自增，统一六个审计字段：id/created_time/created_by/updated_time/updated_by/delete_status。
 
 | 表 | 版本 | 关键字段/关系 | 设计目的 |

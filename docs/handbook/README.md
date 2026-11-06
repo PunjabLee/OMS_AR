@@ -10,6 +10,7 @@
 | [代码架构与数据模型](02-development.md) | 分层、服务职责、21张表、事件、开发约束、扩展方法 | 开发、架构、测试 |
 | [关键算法与事务并发](03-algorithms.md) | 分配、FIFO、额度、汇率、幂等、锁序、对账和通知算法 | 开发、架构、测试 |
 | [接口接入与运维验证](04-integration-operations.md) | 接口清单、权限、请求示例、调用编排、启动、迁移、排障 | 接入开发、运维、测试 |
+| [数据实体 ER 图册](05-entity-relationships.md) | 21 张表全景、五个业务分区及 29 条物理外键的列映射 | 开发、架构、测试 |
 
 Mermaid 图使用标准 `flowchart`、`sequenceDiagram`、`stateDiagram-v2`、`erDiagram` 代码块。支持 Mermaid 的 Markdown 阅读器可直接渲染；不支持的阅读器仍可查看图源码和相邻文字说明。图中关系分为业务引用与数据库外键，ER 图不替代正式 DDL。
 

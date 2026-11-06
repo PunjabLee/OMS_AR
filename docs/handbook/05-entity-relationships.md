@@ -69,52 +69,52 @@ erDiagram
 ```mermaid
 erDiagram
     document {
-        BIGINT id PK
-        VARCHAR doc_no
-        VARCHAR business_type
-        VARCHAR status
+        BIGINT id PK "记录主键"
+        VARCHAR doc_no "应收单编号"
+        VARCHAR business_type "业务类型"
+        VARCHAR status "业务状态"
     }
     business_group {
-        BIGINT id PK
-        VARCHAR group_no
+        BIGINT id PK "记录主键"
+        VARCHAR group_no "业务组编号"
     }
     line {
-        BIGINT id PK
-        BIGINT document_id FK
-        BIGINT group_id FK
-        BIGINT customer_id FK
-        BIGINT legal_entity_id FK
-        CHAR currency FK
-        VARCHAR amount_type
-        DECIMAL receivable_amount
-        DECIMAL settled_amount
-        DECIMAL transferred_amount
-        DECIMAL open_amount
-        DECIMAL invoiced_amount
-        DECIMAL tax_rate
-        VARCHAR status
+        BIGINT id PK "记录主键"
+        BIGINT document_id FK "应收单ID"
+        BIGINT group_id FK "业务组ID"
+        BIGINT customer_id FK "客户ID"
+        BIGINT legal_entity_id FK "核算主体ID"
+        CHAR currency FK "结算币种"
+        VARCHAR amount_type "金额类型"
+        DECIMAL receivable_amount "原始应收金额"
+        DECIMAL settled_amount "已核销金额"
+        DECIMAL transferred_amount "已转入信用账户金额"
+        DECIMAL open_amount "未核销余额"
+        DECIMAL invoiced_amount "已开票金额"
+        DECIMAL tax_rate "税率"
+        VARCHAR status "业务状态"
     }
     line_source {
-        BIGINT id PK
-        BIGINT line_id FK
-        VARCHAR source_event_id
-        VARCHAR source_output_key
-        BIGINT original_line_id FK
+        BIGINT id PK "记录主键"
+        BIGINT line_id FK "应收行ID"
+        VARCHAR source_event_id "上游来源事件ID"
+        VARCHAR source_output_key "来源事件输出键"
+        BIGINT original_line_id FK "原应收行ID"
     }
     adjustment_link {
-        BIGINT id PK
-        BIGINT line_id FK
-        BIGINT related_group_id FK
-        BIGINT original_line_id FK
+        BIGINT id PK "记录主键"
+        BIGINT line_id FK "应收行ID"
+        BIGINT related_group_id FK "调整归属业务组ID"
+        BIGINT original_line_id FK "原应收行ID"
     }
     exchange_basis {
-        BIGINT id PK
-        BIGINT line_id FK
+        BIGINT id PK "记录主键"
+        BIGINT line_id FK "应收行ID"
     }
     source_guard {
-        BIGINT id PK
-        CHAR source_key
-        BOOLEAN blocked
+        BIGINT id PK "记录主键"
+        CHAR source_key "稳定来源身份摘要"
+        BOOLEAN blocked "来源是否已封锁"
     }
     document ||..o{ line : "所属应收单"
     business_group ||..o{ line : "所属物理组"
@@ -144,26 +144,26 @@ erDiagram
 ```mermaid
 erDiagram
     receipt {
-        BIGINT id PK
-        DECIMAL amount
+        BIGINT id PK "记录主键"
+        DECIMAL amount "实际收款金额"
     }
     settlement {
-        BIGINT id PK
-        BIGINT customer_id FK
-        BIGINT legal_entity_id FK
-        CHAR currency FK
-        VARCHAR settlement_type
-        BIGINT receipt_id FK
-        DECIMAL amount
-        VARCHAR status
+        BIGINT id PK "记录主键"
+        BIGINT customer_id FK "客户ID"
+        BIGINT legal_entity_id FK "核算主体ID"
+        CHAR currency FK "结算币种"
+        VARCHAR settlement_type "核销类型"
+        BIGINT receipt_id FK "收款记录ID"
+        DECIMAL amount "核销总额"
+        VARCHAR status "业务状态"
     }
     settlement_allocation {
-        BIGINT id PK
-        BIGINT settlement_id FK
-        BIGINT positive_line_id FK
-        BIGINT negative_line_id FK
-        VARCHAR amount_type
-        DECIMAL amount
+        BIGINT id PK "记录主键"
+        BIGINT settlement_id FK "核销单ID"
+        BIGINT positive_line_id FK "正数应收行ID"
+        BIGINT negative_line_id FK "负数应收行ID"
+        VARCHAR amount_type "金额类型"
+        DECIMAL amount "分配至目标行的核销金额"
     }
     receipt o|..o{ settlement : "收款资金来源"
     settlement ||..o{ settlement_allocation : "核销分配"
@@ -185,31 +185,31 @@ erDiagram
 ```mermaid
 erDiagram
     customer_account {
-        BIGINT id PK
-        DECIMAL balance_amount
+        BIGINT id PK "记录主键"
+        DECIMAL balance_amount "信用账户可用余额"
     }
     balance_lot {
-        BIGINT id PK
-        BIGINT account_id FK
-        BIGINT source_line_id FK
-        BIGINT customer_id FK
-        BIGINT legal_entity_id FK
-        CHAR currency FK
-        DECIMAL amount
-        DECIMAL used_amount
-        VARCHAR status
+        BIGINT id PK "记录主键"
+        BIGINT account_id FK "信用账户ID"
+        BIGINT source_line_id FK "转入余额的负数应收行ID"
+        BIGINT customer_id FK "客户ID"
+        BIGINT legal_entity_id FK "核算主体ID"
+        CHAR currency FK "结算币种"
+        DECIMAL amount "批次原始转入金额"
+        DECIMAL used_amount "批次已使用金额"
+        VARCHAR status "业务状态"
     }
     balance_settlement {
-        BIGINT id PK
-        BIGINT settlement_id FK
-        BIGINT account_id FK
+        BIGINT id PK "记录主键"
+        BIGINT settlement_id FK "核销单ID"
+        BIGINT account_id FK "信用账户ID"
     }
     balance_usage {
-        BIGINT id PK
-        BIGINT settlement_id FK
-        BIGINT allocation_id FK
-        BIGINT lot_id FK
-        DECIMAL amount
+        BIGINT id PK "记录主键"
+        BIGINT settlement_id FK "核销单ID"
+        BIGINT allocation_id FK "核销分配ID"
+        BIGINT lot_id FK "来源批次ID"
+        DECIMAL amount "本次使用的批次金额"
     }
     customer_account ||..o{ balance_lot : "批次所属账户"
     line ||..o{ balance_lot : "转入来源应收"
@@ -237,25 +237,25 @@ erDiagram
 ```mermaid
 erDiagram
     invoice {
-        BIGINT id PK
-        BIGINT customer_id FK
-        BIGINT legal_entity_id FK
-        CHAR currency FK
-        BIGINT original_invoice_id FK
-        DECIMAL total_amount
-        VARCHAR status
+        BIGINT id PK "记录主键"
+        BIGINT customer_id FK "客户ID"
+        BIGINT legal_entity_id FK "核算主体ID"
+        CHAR currency FK "结算币种"
+        BIGINT original_invoice_id FK "原蓝字发票ID"
+        DECIMAL total_amount "发票合计金额"
+        VARCHAR status "业务状态"
     }
     invoice_allocation {
-        BIGINT id PK
-        BIGINT invoice_id FK
-        VARCHAR invoice_kind FK
-        BIGINT receivable_line_id FK
-        VARCHAR amount_type FK
-        DECIMAL amount
-        DECIMAL tax_rate
-        BIGINT original_invoice_id FK
-        BIGINT original_allocation_id FK
-        BIGINT original_allocation_key
+        BIGINT id PK "记录主键"
+        BIGINT invoice_id FK "发票关联ID"
+        VARCHAR invoice_kind FK "蓝红字方向"
+        BIGINT receivable_line_id FK "被关联应收行ID"
+        VARCHAR amount_type FK "金额类型"
+        DECIMAL amount "带符号的开票分配金额"
+        DECIMAL tax_rate "税率"
+        BIGINT original_invoice_id FK "原蓝字发票ID"
+        BIGINT original_allocation_id FK "原蓝字分配ID"
+        BIGINT original_allocation_key "原蓝字分配去重键"
     }
     invoice o|..o{ invoice : "原蓝字发票"
     invoice ||..o{ invoice_allocation : "核对票头方向"
@@ -279,33 +279,33 @@ erDiagram
 ```mermaid
 erDiagram
     operation_request {
-        BIGINT id PK
-        VARCHAR operation_type
-        VARCHAR request_key
-        BIGINT result_reference
+        BIGINT id PK "记录主键"
+        VARCHAR operation_type "操作类型"
+        VARCHAR request_key "幂等请求键"
+        BIGINT result_reference "操作结果引用"
     }
     lifecycle_event {
-        BIGINT id PK
-        VARCHAR trigger_type
-        VARCHAR trigger_id
-        BIGINT reverse_of_id FK
+        BIGINT id PK "记录主键"
+        VARCHAR trigger_type "触发对象类型"
+        VARCHAR trigger_id "触发对象ID"
+        BIGINT reverse_of_id FK "被撤销事件ID"
     }
     lifecycle_change {
-        BIGINT id PK
-        BIGINT event_id FK
-        VARCHAR object_type
-        BIGINT object_id
+        BIGINT id PK "记录主键"
+        BIGINT event_id FK "生命周期事件ID"
+        VARCHAR object_type "变更对象类型"
+        BIGINT object_id "变更对象ID"
     }
     outbox {
-        BIGINT id PK
-        BIGINT event_id FK
-        VARCHAR destination
-        VARCHAR status
+        BIGINT id PK "记录主键"
+        BIGINT event_id FK "生命周期事件ID"
+        VARCHAR destination "通知目的地"
+        VARCHAR status "通知投递状态"
     }
     outbox_retry {
-        BIGINT id PK
-        BIGINT outbox_id FK
-        BIGINT operation_id FK
+        BIGINT id PK "记录主键"
+        BIGINT outbox_id FK "通知记录ID"
+        BIGINT operation_id FK "幂等操作ID"
     }
     lifecycle_event o|..o{ lifecycle_event : "逆向事件原记录"
     lifecycle_event ||..o{ lifecycle_change : "事件变化"

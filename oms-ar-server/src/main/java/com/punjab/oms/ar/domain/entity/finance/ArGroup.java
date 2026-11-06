@@ -5,11 +5,17 @@ import com.baomidou.mybatisplus.annotation.TableName;
 /** business_group持久化记录。 @author Punjab */
 @TableName("oms_ar_business_group")
 public class ArGroup extends ArBaseEntity {
+    /** 业务组编号 */
     private String groupNo;
+    /** 应收所属客户ID */
     private Long customerId;
+    /** 核算主体ID，也是权限范围 */
     private Long legalEntityId;
+    /** 结算币种代码 */
     private String currency;
+    /** 业务发生日期 */
     private LocalDate businessDate;
+    /** 用于并发校验的记录版本 */
     private Long version;
     public String getGroupNo(){return groupNo;}
     public void setGroupNo(String value){this.groupNo=value;}

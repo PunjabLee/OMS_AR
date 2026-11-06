@@ -5,13 +5,21 @@ import com.baomidou.mybatisplus.annotation.TableName;
 /** lifecycle_change持久化记录。 @author Punjab */
 @TableName("oms_ar_lifecycle_change")
 public class ArChange extends ArBaseEntity {
+    /** 事件标识 */
     private Long eventId;
+    /** 被记录或诊断的对象类型 */
     private String objectType;
+    /** 被记录或诊断的对象ID */
     private Long objectId;
+    /** 变更前的对象快照，初始化时为空 */
     private String beforeSnapshot;
+    /** 本次变更的字段及增量 */
     private String deltaSnapshot;
+    /** 变更后的对象快照 */
     private String afterSnapshot;
+    /** 变更前的版本号 */
     private Long beforeVersion;
+    /** 变更后的版本号 */
     private Long afterVersion;
     public Long getEventId(){return eventId;}
     public void setEventId(Long value){this.eventId=value;}

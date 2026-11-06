@@ -5,14 +5,23 @@ import com.baomidou.mybatisplus.annotation.TableName;
 /** line_source持久化记录。 @author Punjab */
 @TableName("oms_ar_line_source")
 public class ArSource extends ArBaseEntity {
+    /** 业务明细行标识 */
     private Long lineId;
+    /** 来源系统标识 */
     private String sourceSystem;
+    /** 来源单据类型 */
     private String sourceType;
+    /** 来源单据编号 */
     private String sourceNo;
+    /** 来源单据ID */
     private String sourceId;
+    /** 可选的来源行标识 */
     private String sourceLineId;
+    /** 来源系统的事件标识 */
     private String sourceEventId;
+    /** 同一来源事件内的输出标识 */
     private String sourceOutputKey;
+    /** 调整所指定的原正数应收行ID */
     private Long originalLineId;
     public Long getLineId(){return lineId;}
     public void setLineId(Long value){this.lineId=value;}

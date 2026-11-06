@@ -3,8 +3,22 @@ import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 /** 收款登记，仅授权的收款适配方可调用。 @author Punjab */
-public record ReceiptCreateRequest(@NotBlank @Size(max=128) String requestKey,
- @NotNull @Positive Long customerId,@NotNull @Positive Long legalEntityId,
- @NotBlank @Size(min=3,max=3) String currency,@NotNull @DecimalMin(value="0",inclusive=false) @Digits(integer=16,fraction=8) BigDecimal amount,
- @NotNull LocalDate receivedDate,@NotBlank @Size(max=64) String sourceSystem,
- @NotBlank @Size(max=128) String sourceId,@NotBlank @Size(max=128) String sourceNo){}
+public record ReceiptCreateRequest(
+    /** 调用方提供的幂等请求键 */
+    @NotBlank @Size(max=128) String requestKey,
+ /** 应收所属客户ID */
+ @NotNull @Positive Long customerId,
+    /** 核算主体ID，也是权限范围 */
+    @NotNull @Positive Long legalEntityId,
+ /** 结算币种代码 */
+ @NotBlank @Size(min=3,max=3) String currency,
+    /** 本记录的业务金额，方向由业务类型决定 */
+    @NotNull @DecimalMin(value="0",inclusive=false) @Digits(integer=16,fraction=8) BigDecimal amount,
+ /** 实际收款日期 */
+ @NotNull LocalDate receivedDate,
+    /** 来源系统标识 */
+    @NotBlank @Size(max=64) String sourceSystem,
+ /** 来源单据ID */
+ @NotBlank @Size(max=128) String sourceId,
+    /** 来源单据编号 */
+    @NotBlank @Size(max=128) String sourceNo){}

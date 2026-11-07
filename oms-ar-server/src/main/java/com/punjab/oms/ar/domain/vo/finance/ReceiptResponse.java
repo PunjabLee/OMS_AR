@@ -26,4 +26,10 @@ public record ReceiptResponse(
     /** 来源单据ID */
     String sourceId,
     /** 来源单据编号 */
-    String sourceNo){}
+    String sourceNo,
+    /** 充值账户，历史未映射收款为空。 */
+    Long cashAccountId,
+    /** 此收款批次尚在冻结的金额。 */
+    BigDecimal frozenAmount,
+    /** 此收款批次已完成提现的金额。 */
+    BigDecimal withdrawnAmount){}

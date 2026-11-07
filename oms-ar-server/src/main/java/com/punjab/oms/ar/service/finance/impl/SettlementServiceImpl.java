@@ -39,7 +39,7 @@ public class SettlementServiceImpl implements SettlementService {
   validate(request);CurrentUser.require(request.legalEntityId(),"ar:settle");return load(request,false).view();
  }
  /** 重新读取并锁定分配依据，核对预览指纹后写核销单、分配、余额变化及流水。 */
- @Override @Transactional(rollbackFor=Exception.class)
+ @Override @Transactional(rollbackFor=Exception.class,isolation=Isolation.READ_COMMITTED)
  public Long confirm(SettlementConfirmRequest request){
   validate(request);
   var ticket=journal.begin(new JournalBeginRequest(request.preview().legalEntityId(),"ar:settle","SETTLEMENT_CONFIRM",request.requestKey(),values.json(request)));

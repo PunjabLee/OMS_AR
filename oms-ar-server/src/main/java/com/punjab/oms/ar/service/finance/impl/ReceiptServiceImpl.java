@@ -13,6 +13,7 @@ import jakarta.validation.Validator;import lombok.RequiredArgsConstructor;import
 @Service @RequiredArgsConstructor
 public class ReceiptServiceImpl implements ReceiptService {
  private final CashReceiptPosting cash;
+ private final com.punjab.oms.ar.dao.finance.CashAccountDao cashAccounts;
  private final ReceiptDao dao;private final ReceiptConverter converter;private final FinanceJournalService journal;private final FinanceValues values;private final Validator validator;
  /** 核验实收金额与来源，初始化未分配收款，并将登记流水和幂等结果一并提交。 */
  @Transactional(rollbackFor=Exception.class)
@@ -31,8 +32,11 @@ public class ReceiptServiceImpl implements ReceiptService {
   journal.complete(ticket,receipt.getId());return receipt.getId();
  }
  /** 校验主体读权限，返回实收原额、已分配额及当前可用额。 */
+ @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
  public ReceiptResponse detail(ReceiptDetailQuery query){
   if(query==null || !validator.validate(query).isEmpty())throw new ServiceException("收款查询参数无效");
-  CurrentUser.require(query.legalEntityId(),"ar:read");var receipt=dao.detail(converter.toDetailQueryBO(query));if(receipt==null)throw new ServiceException("收款不存在或不可访问");return converter.toResponse(receipt);
+  CurrentUser.require(query.legalEntityId(),"ar:read");var receipt=dao.detail(converter.toDetailQueryBO(query));if(receipt==null)throw new ServiceException("收款不存在或不可访问");var lot=cashAccounts.receiptLot(receipt.getId());
+  return converter.toResponse(receipt,lot==null?null:lot.getCashAccountId(),
+          lot==null?BigDecimal.ZERO:lot.getFrozenAmount(),lot==null?BigDecimal.ZERO:lot.getWithdrawnAmount());
  }
 }

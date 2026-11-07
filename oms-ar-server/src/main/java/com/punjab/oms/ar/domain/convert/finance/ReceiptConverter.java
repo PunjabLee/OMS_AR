@@ -12,6 +12,8 @@ public interface ReceiptConverter {
  @Mapping(target="updatedTime",ignore=true) @Mapping(target="updatedBy",ignore=true) @Mapping(target="deleteStatus",ignore=true)
  ArReceipt toEntity(ReceiptCreateRequest request);
  ReceiptDetailQueryBO toDetailQueryBO(ReceiptDetailQuery query);
- @Mapping(target="availableAmount",expression="java(entity.getAmount().subtract(entity.getAllocatedAmount()))")
- ReceiptResponse toResponse(ArReceipt entity);
+ @Mapping(target="availableAmount",expression="java(entity.getAmount().subtract(entity.getAllocatedAmount()).subtract(frozen).subtract(withdrawn))")
+ @Mapping(target="frozenAmount",source="frozen")
+ @Mapping(target="withdrawnAmount",source="withdrawn")
+ ReceiptResponse toResponse(ArReceipt entity, Long cashAccountId, java.math.BigDecimal frozen, java.math.BigDecimal withdrawn);
 }

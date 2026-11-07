@@ -1,6 +1,6 @@
 {
   "mysqlVersion" : "8.0.42",
-  "migrationVersion" : "014",
+  "migrationVersion" : "015",
   "tableHashes" : {
     "oms_ar_adjustment_link" : "6071600de4cba07a25bce02bc1ddaa61aba3b1d6ef46c8d53c1d0e72a70e00c4",
     "oms_ar_balance_lot" : "517cf13ed5b4075b2ccbc563d76e255d20ce6d77a6263df6da39bc0d924b69eb",
@@ -9,6 +9,7 @@
     "oms_ar_business_group" : "3b863584b9950787bb307656f597c5d0154fe31985afea2ad4a1aa26279374c4",
     "oms_ar_cash_account" : "3b2eb08d20ba13705e27128cea461302be1c8121277d1ac58963e1d801693147",
     "oms_ar_cash_group_binding" : "98492311d28caa7bdcdf43e2d5b66f4e368b66fcbed09c7addfb3822e3d14748",
+    "oms_ar_cash_receipt_lot" : "3b3de598a55134f7c17c4746abc34c20a18591c2859d50a7d9538886c03cd305",
     "oms_ar_customer_account" : "d4f1e564e37743266bcefc932c89c42a1f2b06023a505df857a53c7417d13d7f",
     "oms_ar_document" : "b3bad19440b554878d1d2113e05e967228e3aa8db96c06ec5c10834c9c4973b6",
     "oms_ar_exchange_basis" : "f3901fb7939410db343b78f6ee1d8add097fdef7602e250bac60c480ea30025d",

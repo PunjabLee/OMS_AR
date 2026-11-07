@@ -124,6 +124,20 @@ def main():
         create_bound([dict(tax, invoiceMode='NO_INVOICE')], 409)
         create_bound([price], 409)
         create_bound([dict(price, invoiceMode='NO_INVOICE'), dict(tax, invoiceMode='INVOICE')], 409)
+        ab_line = api(port, f'receivables/detail?id={doc_ab}&legalEntityId=1')['lines'][0]
+        ab_group = ab_line['groupId']
+        eligibility = api(port, 'invoice-links/eligibility', dict(legalEntityId=1, customerId=7, currency='CNY', groupIds=[ab_group]))
+        assert eligibility['buckets'] == [] and eligibility['lines'][0]['blockedReason'] == 'NON_INVOICE_ACCOUNT'
+        api(port, 'invoice-links/preview', dict(legalEntityId=1, customerId=7, currency='CNY', kind='BLUE', totalAmount=1,
+            lines=[dict(invoiceLineId='1',receivableLineId=ab_line['id'],amount=1)]), status=409)
+        negative_doc = create_bound([dict(price,amount=-5,invoiceMode='INVOICE')])
+        negative_id = api(port, f'receivables/detail?id={negative_doc}&legalEntityId=1')['lines'][0]['id']
+        offset = dict(legalEntityId=1,negativeLineId=negative_id,amount=5,groupIds=[ab_group],strategy='GROUP_TAX_FIRST')
+        api(port,'offsets/preview',offset,status=409)
+        inside = dict(offset, groupIds=[bound['groupId']])
+        allowed = api(port,'offsets/preview',inside)
+        assert allowed['usedAmount'] == 5
+        api(port,'offsets/confirm',dict(requestKey=key(),preview=inside,expectedFingerprint=allowed['fingerprint'],reason='同户抵销'))
         report['checks'].append('cash ownership: shared price/tax account, inherited adjustments and rejected mismatches')
         lines = []
         for group, amount, tax in [('A', 100, 13), ('B', 200, 26)]:

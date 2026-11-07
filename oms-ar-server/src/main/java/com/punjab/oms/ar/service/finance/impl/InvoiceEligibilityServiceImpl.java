@@ -5,6 +5,7 @@ import java.math.BigDecimal;import java.util.*;import java.nio.charset.StandardC
 /** 收款及核销不扣开票额度，负数调整按原组/类型/税率归集。 @author Punjab */
 @Service @RequiredArgsConstructor
 public class InvoiceEligibilityServiceImpl implements InvoiceEligibilityService {
+ private final CashGroupOwnership ownership;
  private final InvoiceEligibilityDao dao;private final InvoiceEligibilityConverter converter;private final InvoiceProperties properties;private final FinanceValues values;private final Validator validator;
  /** 税率标准化后的共享额度键；NULL与零税率不同。 @author Punjab */
  private record BucketKey(Long groupId,String amountType,BigDecimal taxRate){}
@@ -18,12 +19,14 @@ public class InvoiceEligibilityServiceImpl implements InvoiceEligibilityService 
  private InvoiceEligibilityResponse calculate(InvoiceEligibilityQuery query,String permission){
   if(query==null || !validator.validate(query).isEmpty() || new HashSet<>(query.groupIds()).size()!=query.groupIds().size())throw new ServiceException("开票额度查询范围无效");CurrentUser.require(query.legalEntityId(),permission);
   var bo=converter.toQueryBO(query);if(dao.groups(bo).size()!=query.groupIds().size())throw new ServiceException("业务组不存在或客户、主体、币种不一致");
+  var accounts=ownership.groupAccounts(query.legalEntityId(),query.customerId(),query.currency(),query.groupIds());
   boolean exchangeEnabled=properties.isExchangeDifferenceEnabled();var rows=dao.lines(bo);Map<BucketKey,BigDecimal[]> totals=new LinkedHashMap<>();var lines=new ArrayList<InvoiceEligibilityResponse.Line>();
   for(var row:rows){
    if(row.getAdjustmentOriginalLineId()!=null && (!row.getAmountType().equals(row.getOriginalAmountType()) || !FinanceValues.sameTaxRate(row.getTaxRate(),row.getOriginalTaxRate())))throw new ServiceException("调整应收与原行价税类型或税率不一致，请先更正调整单");
    if(row.getInvoicedAmount().abs().compareTo(row.getReceivableAmount().abs())>0 || (row.getInvoicedAmount().signum()!=0 && row.getInvoicedAmount().signum()!=row.getReceivableAmount().signum()))throw new ServiceException("已开票金额方向或额度不一致，请先对账");
    if("OUTPUT_TAX".equals(row.getAmountType()) && row.getTaxRate()==null)throw new ServiceException("税额行缺少税率，无法计算开票额度");
-   String blocked=null;
+   var account=accounts.get(row.getInvoiceGroupId());
+   String blocked=account!=null && !"INVOICE".equals(account.getInvoiceMode()) ? "NON_INVOICE_ACCOUNT" : null;
    if("EXCHANGE_DIFFERENCE".equals(row.getBusinessType())){if(!exchangeEnabled)blocked="EXCHANGE_DIFFERENCE_DISABLED";else if(row.getExchangeBasisId()==null)blocked="EXCHANGE_BASIS_MISSING";}
    var remaining=row.getReceivableAmount().subtract(row.getInvoicedAmount());var rate=row.getTaxRate()==null?null:row.getTaxRate().stripTrailingZeros();
    lines.add(new InvoiceEligibilityResponse.Line(row.getId(),row.getGroupId(),row.getInvoiceGroupId(),row.getAmountType(),rate,row.getReceivableAmount(),row.getInvoicedAmount(),remaining,row.getVersion(),blocked==null,blocked));

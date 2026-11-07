@@ -19,6 +19,7 @@ import java.util.*;
 /** 正负应收抵销：持久化关联约束、按组锁定及确认前指纹验证。 @author Punjab */
 @Service @RequiredArgsConstructor
 public class OffsetServiceImpl implements OffsetService {
+ private final CashGroupOwnership ownership;
  private final SettlementDao dao;
  private final ReceivableDao receivables;
  private final FinanceJournalService journal;
@@ -63,6 +64,9 @@ public class OffsetServiceImpl implements OffsetService {
   var groups=dao.groups(List.copyOf(allGroups),request.legalEntityId(),lock);
   for(var group:groups)if(!negative.getCustomerId().equals(group.getCustomerId()) || !negative.getCurrency().equals(group.getCurrency()))throw new ServiceException("业务组客户或币种不一致");
   if(groups.size()!=allGroups.size())throw new ServiceException("业务组不存在或不可访问");
+  var owners=ownership.groupAccounts(request.legalEntityId(),negative.getCustomerId(),negative.getCurrency(),allGroups);
+  if(owners.values().stream().map(ArCashAccount::getId).distinct().count()>1)
+   throw new ServiceException("负数抵销只能使用原账户的业务组");
   // 所有业务组锁取得后才锁明细，与创建及其他核销保持相同锁顺序。
   negative=receivables.line(request.negativeLineId(),lock);checkNegative(negative,request);
   values.positiveMoney(negative.getCurrency(),request.amount());

@@ -20,6 +20,22 @@ public class CashGroupOwnership {
         this.scopes = Set.copyOf(Arrays.asList(configured.split(",")));
     }
 
+    /** 返回启用分户范围内每个业务组的归属，缺失映射时中止资金操作。 */
+    public Map<Long,ArCashAccount> groupAccounts(Long legalEntityId, Long customerId, String currency,
+                                                 Collection<Long> groupIds) {
+        if (!scopes.contains(legalEntityId + "/" + customerId + "/" + currency)) return Map.of();
+        Map<Long,ArCashAccount> result = new HashMap<>();
+        Map<Long,ArCashAccount> cache = new HashMap<>();
+        for (Long groupId : groupIds) {
+            Long id = accounts.boundAccount(groupId);
+            ArCashAccount row = id == null ? null : cache.computeIfAbsent(id, key -> accounts.find(key, legalEntityId));
+            if (row == null || !customerId.equals(row.getCustomerId()) || !currency.equals(row.getCurrency()))
+                throw new ServiceException("业务组缺少同范围账户映射");
+            result.put(groupId, row);
+        }
+        return result;
+    }
+
     /** 同一新组可由一条明细指定属性，其余行共同继承。关联调整从原行所在组继承。 */
     public Map<String, ArCashAccount> resolve(ReceivableCreateRequest request, Map<Long,ArLine> originals) {
         String scope = request.legalEntityId() + "/" + request.customerId() + "/" + request.currency();

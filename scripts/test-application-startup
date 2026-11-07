@@ -53,7 +53,7 @@ def main():
     env = {k: v for k, v in os.environ.items() if not k.startswith(('DB_', 'AR_', 'SPRING_', 'SERVER_'))}
     env.update(DB_URL=f'jdbc:mysql://127.0.0.1:13306/{database}', DB_USERNAME='oms_ar', DB_PASSWORD=password,
                AR_JDK_HOME=settings.get('AR_JDK_HOME', DEFAULT_JDK), AR_API_TOKEN=token, AR_API_USER='startup-verification',
-               AR_LEGAL_ENTITIES='1', AR_PERMISSIONS='ar:create,ar:read,ar:receipt:create,ar:settle,ar:reverse,ar:invoice:write,ar:void,ar:outbox:read,ar:outbox:retry',
+               AR_LEGAL_ENTITIES='1', AR_PERMISSIONS='ar:cash:open,ar:cash:read,ar:create,ar:read,ar:receipt:create,ar:settle,ar:reverse,ar:invoice:write,ar:void,ar:outbox:read,ar:outbox:retry',
                SERVER_ADDRESS='127.0.0.1', SERVER_PORT='0', AR_OUTBOX_ENABLED='false', AR_OUTBOX_SCHEDULING_ENABLED='false',
                AR_DATABASE_VERIFY_SCHEMA='true', SPRING_FLYWAY_ENABLED='true', SPRING_PROFILES_ACTIVE='')
     process = None
@@ -93,6 +93,18 @@ def main():
         assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '13'
         report['checks'].append('cold startup: automatic 13-version migration and schema validation')
         api(port, 'receivables/detail?id=1&legalEntityId=1', status=401, authenticated=False)
+        opening = dict(requestKey=key(), customerId=7, legalEntityId=1, currency='CNY', invoiceMode='INVOICE', reason='开户验收')
+        aa = api(port, 'cash-accounts/open', opening)
+        assert api(port, 'cash-accounts/open', opening) == aa
+        ab = api(port, 'cash-accounts/open', dict(opening, requestKey=key(), invoiceMode='NO_INVOICE'))
+        assert aa != ab
+        api(port, 'cash-accounts/open', dict(opening, requestKey=key()), status=409)
+        api(port, 'cash-accounts/open', dict(opening, invoiceMode='NO_INVOICE'), status=409)
+        api(port, f'cash-accounts/detail?id={aa}&legalEntityId=2', status=403)
+        cash = api(port, f'cash-accounts/detail?id={aa}&legalEntityId=1')
+        assert cash['bookAmount'] == cash['frozenAmount'] == cash['availableAmount'] == 0
+        assert sql("SELECT COUNT(*) FROM oms_ar_lifecycle_event WHERE event_type='CASH_ACCOUNT_OPENED';") == '2'
+        report['checks'].append('cash accounts: invoice-mode uniqueness, scoped balances and idempotent opening')
         today = date.today().isoformat()
         lines = []
         for group, amount, tax in [('A', 100, 13), ('B', 200, 26)]:

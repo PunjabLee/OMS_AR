@@ -37,6 +37,8 @@ oms_ar_test用于业务夹具，首次自动创建，后续不清空；这些用
 
 ## 业务与开发手册
 
+[上游单据关联查询与应收合表评估](docs/ar-source-query-comparison.md)
+
 [数据字典手册](docs/ar-data-dictionary.md)按物理表列出全部字段、中文含义、默认值、索引和约束。
 
 [完整手册目录](docs/handbook/README.md)包含业务规则与流程、代码模块与实际数据模型、关键算法与事务并发、接口示例和运行排障，并提供Mermaid流程、时序、状态和ER图。

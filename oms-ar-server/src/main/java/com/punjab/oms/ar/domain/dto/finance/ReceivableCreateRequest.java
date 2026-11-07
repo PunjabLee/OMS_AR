@@ -44,7 +44,13 @@ public record ReceivableCreateRequest(
     /** 调整所指定的原正数应收行ID */
     @Positive Long originalLineId,
     /** 原币金额和汇率折算依据 */
-    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) @Valid ExchangeBasis exchangeBasis) {
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) @Valid ExchangeBasis exchangeBasis,
+    /** 新组的开票属性，已有组或原行调整可继承。 */
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    @Pattern(regexp="INVOICE|NO_INVOICE") String invoiceMode) {
+  public Line(String groupKey,Long groupId,AmountType amountType,BigDecimal amount,BigDecimal taxRate,BigDecimal taxBaseAmount,Source source,Long originalLineId,ExchangeBasis exchangeBasis){
+   this(groupKey,groupId,amountType,amount,taxRate,taxBaseAmount,source,originalLineId,exchangeBasis,null);
+  }
   public Line(String groupKey,Long groupId,AmountType amountType,BigDecimal amount,BigDecimal taxRate,BigDecimal taxBaseAmount,Source source,Long originalLineId){this(groupKey,groupId,amountType,amount,taxRate,taxBaseAmount,source,originalLineId,null);}
   public Line(String groupKey,Long groupId,AmountType amountType,BigDecimal amount,BigDecimal taxRate,BigDecimal taxBaseAmount,Source source){this(groupKey,groupId,amountType,amount,taxRate,taxBaseAmount,source,null);}
  }

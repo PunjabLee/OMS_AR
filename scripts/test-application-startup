@@ -55,7 +55,7 @@ def main():
                AR_JDK_HOME=settings.get('AR_JDK_HOME', DEFAULT_JDK), AR_API_TOKEN=token, AR_API_USER='startup-verification',
                AR_LEGAL_ENTITIES='1', AR_PERMISSIONS='ar:cash:open,ar:cash:read,ar:create,ar:read,ar:receipt:create,ar:settle,ar:reverse,ar:invoice:write,ar:void,ar:outbox:read,ar:outbox:retry',
                SERVER_ADDRESS='127.0.0.1', SERVER_PORT='0', AR_OUTBOX_ENABLED='false', AR_OUTBOX_SCHEDULING_ENABLED='false',
-               AR_DATABASE_VERIFY_SCHEMA='true', SPRING_FLYWAY_ENABLED='true', SPRING_PROFILES_ACTIVE='')
+               AR_CASH_BINDING_SCOPES='1/7/CNY', AR_DATABASE_VERIFY_SCHEMA='true', SPRING_FLYWAY_ENABLED='true', SPRING_PROFILES_ACTIVE='')
     process = None
     logs = []
     created = False
@@ -106,6 +106,25 @@ def main():
         assert sql("SELECT COUNT(*) FROM oms_ar_lifecycle_event WHERE event_type='CASH_ACCOUNT_OPENED';") == '2'
         report['checks'].append('cash accounts: invoice-mode uniqueness, scoped balances and idempotent opening')
         today = date.today().isoformat()
+        def create_bound(lines, status=200):
+            return api(port, 'receivables/create', dict(requestKey=key(), customerId=7, legalEntityId=1,
+                       currency='CNY', businessType='SERVICE', businessDate=today, reason='账户归属验收', lines=lines), status=status)
+        price = dict(groupKey='A', amountType='PRINCIPAL', amount=100)
+        tax = dict(groupKey='A', amountType='OUTPUT_TAX', amount=13, taxRate=0.13, taxBaseAmount=100)
+        doc_aa = create_bound([price, dict(tax, invoiceMode='INVOICE')])
+        doc_ab = create_bound([dict(price, invoiceMode='NO_INVOICE')])
+        def owners(doc):
+            return sql(f'SELECT b.cash_account_id FROM oms_ar_line l JOIN oms_ar_cash_group_binding b ON b.group_id=l.group_id WHERE l.document_id={doc} ORDER BY l.id').splitlines()
+        assert owners(doc_aa) == [str(aa),str(aa)] and owners(doc_ab) == [str(ab)]
+        bound = api(port, f'receivables/detail?id={doc_aa}&legalEntityId=1')['lines'][1]
+        assert owners(create_bound([dict(tax, groupId=bound['groupId'])])) == [str(aa)]
+        adjustment = dict(tax, amount=-4, originalLineId=bound['id'])
+        assert owners(create_bound([adjustment])) == [str(aa)]
+        create_bound([dict(adjustment, invoiceMode='NO_INVOICE')], 409)
+        create_bound([dict(tax, invoiceMode='NO_INVOICE')], 409)
+        create_bound([price], 409)
+        create_bound([dict(price, invoiceMode='NO_INVOICE'), dict(tax, invoiceMode='INVOICE')], 409)
+        report['checks'].append('cash ownership: shared price/tax account, inherited adjustments and rejected mismatches')
         lines = []
         for group, amount, tax in [('A', 100, 13), ('B', 200, 26)]:
             lines += [{'groupKey': group, 'amountType': 'PRINCIPAL', 'amount': amount},

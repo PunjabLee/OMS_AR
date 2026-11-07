@@ -24,6 +24,8 @@ public class ReceivableServiceImpl implements ReceivableService {
  private final com.punjab.oms.ar.service.finance.OutboxEnqueueService outbox;
  private final com.punjab.oms.ar.common.utils.FinanceSnapshotJson snapshots;
  private final ReceivableDao dao;
+ private final CashGroupOwnership ownership;
+ private final com.punjab.oms.ar.dao.finance.CashAccountDao cashAccounts;
  private final ReceivableConverter converter;
  private final ObjectMapper json;
  private final Validator validator;
@@ -79,6 +81,7 @@ public class ReceivableServiceImpl implements ReceivableService {
    if(!com.punjab.oms.ar.common.utils.FinanceValues.sameTaxRate(input.taxRate(),original.getTaxRate()))throw new ServiceException("指定原应收行的调整须保留原税率，新税率请另行生成应收");
    originals.put(original.getId(),original);
   }
+  var accountByGroupKey=ownership.resolve(request,originals);
   ArDocument document=audit(converter.toEntity(request),actor,now);
   document.setDocNo("AR-"+UUID.randomUUID());document.setStatus("ACTIVE");document.setVersion(0L);
   document.setGenerationMode(request.lines().stream().allMatch(line->line.source()==null)?"DIRECT":"UPSTREAM");
@@ -100,6 +103,13 @@ public class ReceivableServiceImpl implements ReceivableService {
      group=audit(new ArGroup(),actor,now);group.setGroupNo("GR-"+UUID.randomUUID());
      group.setCustomerId(request.customerId());group.setLegalEntityId(request.legalEntityId());group.setCurrency(request.currency());
      group.setBusinessDate(request.businessDate());group.setVersion(0L);persist(dao.createGroup(group));
+     var account=accountByGroupKey.get(input.groupKey());
+     if(account!=null){
+      var binding=audit(new ArCashGroupBinding(),actor,now);
+      binding.setCashAccountId(account.getId());binding.setGroupId(group.getId());
+      binding.setCustomerId(request.customerId());binding.setLegalEntityId(request.legalEntityId());binding.setCurrency(request.currency());
+      persist(cashAccounts.bind(binding));snapshot(event,"CASH_GROUP_BINDING",binding,actor,now);
+     }
      newGroups.put(input.groupKey(),group);snapshot(event,"GROUP",group,actor,now);
     }
    }

@@ -206,7 +206,7 @@ def main():
             admin(f"REVOKE ALL PRIVILEGES ON `{database}`.* FROM 'oms_ar'@'%'; DROP DATABASE `{database}`;")
     report['temporaryDatabaseRemoved'] = True
     (WORK / 'startup-smoke-result.json').write_text(json.dumps(report, indent=2, ensure_ascii=False) + '\n')
-    print('Packaged application startup verification passed: 5 groups of checks; temporary database removed.')
+    print(f"Packaged application startup verification passed: {len(report['checks'])} groups of checks; temporary database removed.")
 
 if __name__ == '__main__':
     main()

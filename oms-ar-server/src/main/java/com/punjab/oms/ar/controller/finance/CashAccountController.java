@@ -14,6 +14,16 @@ import lombok.RequiredArgsConstructor;
 @RestController @RequiredArgsConstructor @RequestMapping("/api/finance/cash-accounts")
 public class CashAccountController {
     private final CashAccountService service;
+    private final com.punjab.oms.ar.service.finance.CashSettlementService settlements;
+
+    @Operation(summary="预览现金账户核销",description="预览现金账户核销") @PostMapping("/settlements/preview")
+    public ApiReturn<com.punjab.oms.ar.domain.vo.finance.CashSettlementView> preview(@Valid @RequestBody BalanceSettlementPreviewRequest request) {
+        return ApiReturn.of(settlements.preview(request));
+    }
+    @Operation(summary="确认现金账户核销",description="确认现金账户核销") @PostMapping("/settlements/confirm")
+    public ApiReturn<com.punjab.oms.ar.domain.vo.finance.CashSettlementView.Posted> confirm(@Valid @RequestBody BalanceSettlementConfirmRequest request) {
+        return ApiReturn.of(settlements.confirm(request));
+    }
     @Operation(summary="开设现金账户",description="开设现金账户") @PostMapping("/open")
     public ApiReturn<Long> open(@Valid @RequestBody CashAccountOpenRequest request) {
         return ApiReturn.of(service.open(request));

@@ -154,6 +154,32 @@ def main():
         api(port,'settlements/preview',dict(direct,amount=41),status=409)
         api(port,'settlements/reverse',dict(requestKey=key(),legalEntityId=1,settlementId=cash_settle,reason='恢复原批次'))
         assert cash_amount(aa) == 100
+        # 第二批充值不会增加第一张收款单的可用额。
+        second_receipt = api(port,'receipts/create',dict(deposit,requestKey=key(),sourceId=key(),amount=80))
+        fifo = dict(legalEntityId=1,accountId=aa,amount=60,groupIds=direct['groupIds'],strategy='GROUP_TAX_FIRST')
+        def confirm_cash(request):
+            view = api(port,'cash-accounts/settlements/preview',request)
+            command = dict(requestKey=key(),preview=request,expectedFingerprint=view['fingerprint'],reason='按批次核销')
+            posted = api(port,'cash-accounts/settlements/confirm',command)
+            assert api(port,'cash-accounts/settlements/confirm',command) == posted
+            api(port,'cash-accounts/settlements/confirm',dict(command,requestKey=key()),status=409)
+            return view, posted['settlementIds']
+        first_view, first_ids = confirm_cash(fifo)
+        assert [f['receiptId'] for f in first_view['funding']] == [receipt_aa]
+        assert cash_amount(aa) == 120
+        api(port,'settlements/preview',dict(direct,amount=41),status=409)
+        assert api(port,'settlements/preview',dict(direct,amount=40))['usedAmount'] == 40
+        split, split_ids = confirm_cash(dict(fifo,amount=55))
+        assert [(f['receiptId'],f['amount']) for f in split['funding']] == [(receipt_aa,40),(second_receipt,15)]
+        assert len(split_ids) == 2 and cash_amount(aa) == 65
+        assert api(port,f'receipts/detail?id={second_receipt}&legalEntityId=1')['availableAmount'] == 65
+        for settlement in first_ids + split_ids:
+            api(port,'settlements/reverse',dict(requestKey=key(),legalEntityId=1,settlementId=settlement,reason='按原单回补'))
+        assert cash_amount(aa) == 180
+        assert api(port,f'receipts/detail?id={receipt_aa}&legalEntityId=1')['availableAmount'] == 100
+        assert api(port,f'receipts/detail?id={second_receipt}&legalEntityId=1')['availableAmount'] == 80
+        api(port,'cash-accounts/settlements/preview',dict(fifo,groupIds=[ab_group]),status=409)
+        report['checks'].append('shared receipt lots: direct limit, FIFO split, stale requests and original receipt reversal')
         report['checks'].append('receipt deposits: idempotent posting, scoped settlement and exact reversal')
         report['checks'].append('cash ownership: shared price/tax account, inherited adjustments and rejected mismatches')
         lines = []

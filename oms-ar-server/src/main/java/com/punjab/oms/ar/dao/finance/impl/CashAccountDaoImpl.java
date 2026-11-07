@@ -41,6 +41,21 @@ public class CashAccountDaoImpl extends CrudRepository<ArCashAccountMapper,ArCas
         return lots.selectOne(com.baomidou.mybatisplus.core.toolkit.Wrappers.<ArCashReceiptLot>lambdaQuery()
                 .eq(ArCashReceiptLot::getReceiptId,receipt));
     }
+    private final com.punjab.oms.ar.mapper.finance.ArChangeMapper changes;
+
+    public java.util.List<ArCashReceiptLot> fifo(Long accountId) {
+        return lots.selectList(com.baomidou.mybatisplus.core.toolkit.Wrappers.<ArCashReceiptLot>lambdaQuery()
+                .eq(ArCashReceiptLot::getCashAccountId,accountId).eq(ArCashReceiptLot::getDeleteStatus,false)
+                .orderByAsc(ArCashReceiptLot::getId));
+    }
+    public String batchSnapshot(Long eventId, Long operationId) {
+        var row=changes.selectOne(com.baomidou.mybatisplus.core.toolkit.Wrappers
+                .<com.punjab.oms.ar.domain.entity.finance.ArChange>lambdaQuery()
+                .eq(com.punjab.oms.ar.domain.entity.finance.ArChange::getEventId,eventId)
+                .eq(com.punjab.oms.ar.domain.entity.finance.ArChange::getObjectType,"CASH_SETTLEMENT_BATCH")
+                .eq(com.punjab.oms.ar.domain.entity.finance.ArChange::getObjectId,operationId));
+        return row==null?null:row.getAfterSnapshot();
+    }
     public boolean insertLot(ArCashReceiptLot lot) { return lots.insert(lot)==1; }
     public boolean updateBook(ArCashAccount account, Long expectedVersion) {
         return lambdaUpdate().eq(ArCashAccount::getId,account.getId()).eq(ArCashAccount::getVersion,expectedVersion)

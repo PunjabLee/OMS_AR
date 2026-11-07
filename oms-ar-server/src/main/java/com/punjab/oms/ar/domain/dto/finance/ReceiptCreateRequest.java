@@ -21,4 +21,12 @@ public record ReceiptCreateRequest(
  /** 来源单据ID */
  @NotBlank @Size(max=128) String sourceId,
     /** 来源单据编号 */
-    @NotBlank @Size(max=128) String sourceNo){}
+    @NotBlank @Size(max=128) String sourceNo,
+    /** 分户范围必填的充值账户。 */
+    @Positive @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    Long cashAccountId) {
+    public ReceiptCreateRequest(String key,Long customer,Long scope,String currency,BigDecimal amount,
+                                LocalDate date,String system,String source,String number) {
+        this(key,customer,scope,currency,amount,date,system,source,number,null);
+    }
+}

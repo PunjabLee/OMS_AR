@@ -20,6 +20,11 @@ public class CashGroupOwnership {
         this.scopes = Set.copyOf(Arrays.asList(configured.split(",")));
     }
 
+    /** 判断结算范围是否已启用分户。 */
+    public boolean enabled(Long scope, Long customer, String currency) {
+        return scopes.contains(scope + "/" + customer + "/" + currency);
+    }
+
     /** 返回启用分户范围内每个业务组的归属，缺失映射时中止资金操作。 */
     public Map<Long,ArCashAccount> groupAccounts(Long legalEntityId, Long customerId, String currency,
                                                  Collection<Long> groupIds) {

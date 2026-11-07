@@ -138,6 +138,23 @@ def main():
         allowed = api(port,'offsets/preview',inside)
         assert allowed['usedAmount'] == 5
         api(port,'offsets/confirm',dict(requestKey=key(),preview=inside,expectedFingerprint=allowed['fingerprint'],reason='同户抵销'))
+        deposit = dict(requestKey=key(),customerId=7,legalEntityId=1,currency='CNY',amount=100,
+                       receivedDate=today,sourceSystem='STARTUP',sourceId=key(),sourceNo=key(),cashAccountId=aa)
+        receipt_aa = api(port,'receipts/create',deposit)
+        assert api(port,'receipts/create',deposit) == receipt_aa
+        api(port,'receipts/create',dict(deposit,requestKey=key(),cashAccountId=ab),status=409)
+        def cash_amount(account):
+            return api(port,f'cash-accounts/detail?id={account}&legalEntityId=1')['availableAmount']
+        assert cash_amount(aa) == 100 and cash_amount(ab) == 0
+        direct = dict(legalEntityId=1,receiptId=receipt_aa,amount=60,groupIds=[bound['groupId']],strategy='GROUP_TAX_FIRST')
+        api(port,'settlements/preview',dict(direct,groupIds=[ab_group]),status=409)
+        direct_view = api(port,'settlements/preview',direct)
+        cash_settle = api(port,'settlements/confirm',dict(requestKey=key(),preview=direct,expectedFingerprint=direct_view['fingerprint'],reason='直核'))
+        assert cash_amount(aa) == 40
+        api(port,'settlements/preview',dict(direct,amount=41),status=409)
+        api(port,'settlements/reverse',dict(requestKey=key(),legalEntityId=1,settlementId=cash_settle,reason='恢复原批次'))
+        assert cash_amount(aa) == 100
+        report['checks'].append('receipt deposits: idempotent posting, scoped settlement and exact reversal')
         report['checks'].append('cash ownership: shared price/tax account, inherited adjustments and rejected mismatches')
         lines = []
         for group, amount, tax in [('A', 100, 13), ('B', 200, 26)]:

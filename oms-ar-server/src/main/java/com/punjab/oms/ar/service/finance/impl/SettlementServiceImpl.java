@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
 /** 收款核销统一事务：按组锁定、预览指纹校验、原分配逆向恢复。 @author Punjab */
 @Service @RequiredArgsConstructor
 public class SettlementServiceImpl implements SettlementService {
+ private final CashReceiptPosting cash;
  private final SettlementDao dao;
  private final BalanceSettlementService balanceSettlements;
  private final AllocationService allocator;
@@ -30,7 +31,7 @@ public class SettlementServiceImpl implements SettlementService {
  private final FinanceValues values;
  private final Validator validator;
  /** 当前余额及对应预览，仅在当前调用内有效。 @author Punjab */
- private record State(ArReceipt receipt,List<ArLine> lines,SettlementPreviewResponse view){}
+ private record State(ArCashAccount account,ArReceipt receipt,List<ArLine> lines,SettlementPreviewResponse view){}
 
  /** 读取收款及目标组的有效正数行，计算税后价分配和确认指纹。 */
  @Override @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
@@ -60,6 +61,7 @@ public class SettlementServiceImpl implements SettlementService {
    check(dao.allocate(allocation));changes.add(initial("SETTLEMENT_ALLOCATION",allocation));
    changes.add(moveLine(byId.get(input.lineId()),input.amount(),ticket.actor()));
   }
+  if(state.account()!=null)changes.add(cash.move(state.account(),settlement.getAmount().negate(),ticket.actor()));
   changes.add(moveReceipt(receipt,settlement.getAmount(),ticket.actor()));
   journal.append(new JournalEventRequest("RECEIPT_SETTLED",ticket.actor(),request.reason(),"SETTLEMENT",settlement.getId().toString(),"settlement:"+ticket.id(),null,changes),ticket);
   journal.complete(ticket,settlement.getId());return settlement.getId();
@@ -76,6 +78,7 @@ public class SettlementServiceImpl implements SettlementService {
   if(settlement==null)throw new ServiceException("核销单不存在或不可访问");
   if("REVERSED".equals(settlement.getStatus())){journal.complete(ticket,settlement.getId());return settlement.getId();}
   if(!Set.of("RECEIPT","OFFSET").contains(settlement.getSettlementType()))throw new ServiceException("该核销类型尚未支持反核销");
+  var account=settlement.getReceiptId()==null?null:cash.account(settlement.getReceiptId(),request.legalEntityId(),true);
   var receipt=settlement.getReceiptId()==null?null:dao.receipt(settlement.getReceiptId(),request.legalEntityId(),true);
   if("RECEIPT".equals(settlement.getSettlementType()) && receipt==null)throw new ServiceException("原收款不可访问");
   var allocations=dao.allocations(settlement.getId());
@@ -99,6 +102,7 @@ public class SettlementServiceImpl implements SettlementService {
    total=total.add(allocation.getAmount());
   }
   if(total.compareTo(settlement.getAmount())!=0)throw new ServiceException("原核销分配金额不一致");
+  if(account!=null)changes.add(cash.move(account,total,ticket.actor()));
   if(receipt!=null)changes.add(moveReceipt(receipt,total.negate(),ticket.actor()));
   String before=values.json(settlement);long version=settlement.getVersion();settlement.setStatus("REVERSED");settlement.setVersion(version+1);touch(settlement,ticket.actor());check(dao.update(settlement,version));
   changes.add(new JournalEventRequest.Change("SETTLEMENT",settlement.getId(),before,values.json(Map.of("status","REVERSED")),values.json(settlement),version,settlement.getVersion()));
@@ -109,16 +113,18 @@ public class SettlementServiceImpl implements SettlementService {
  /** 加载当前业务对象及关联分配依据，按调用模式锁定并计算预览。 */
  private State load(SettlementPreviewRequest request,boolean lock){
   if(new HashSet<>(request.groupIds()).size()!=request.groupIds().size())throw new ServiceException("业务组不能重复选择");
+  var account=cash.account(request.receiptId(),request.legalEntityId(),lock);
   var receipt=dao.receipt(request.receiptId(),request.legalEntityId(),lock);if(receipt==null)throw new ServiceException("收款不存在或不可访问");
   values.positiveMoney(receipt.getCurrency(),request.amount());
   if(request.amount().compareTo(receipt.getAmount().subtract(receipt.getAllocatedAmount()))>0)throw new ServiceException("收款可用余额不足");
   checkGroups(dao.groups(request.groupIds(),request.legalEntityId(),lock),request.groupIds(),receipt);
+  cash.validate(receipt,account,request.groupIds(),request.amount());
   var lines=dao.groupLines(request.groupIds(),lock);
   var groups=request.groupIds().stream().map(id->new AllocationPreviewRequest.Group(id,lines.stream().filter(line->id.equals(line.getGroupId())).map(line->new AllocationPreviewRequest.Line(line.getId(),AmountType.valueOf(line.getAmountType()),line.getOpenAmount())).toList())).toList();
   var allocated=allocator.preview(new AllocationPreviewRequest(request.amount(),Currency.getInstance(receipt.getCurrency()).getDefaultFractionDigits(),request.strategy(),groups));
-  String fingerprint=hash(values.json(List.of(request,receipt,lines)));
+  String fingerprint=hash(values.json(account==null?List.of(request,receipt,lines):List.of(request,receipt,lines,account)));
   Map<Long,Long> versions=lines.stream().collect(Collectors.toMap(ArLine::getId,ArLine::getVersion));
-  return new State(receipt,lines,new SettlementPreviewResponse(receipt.getVersion(),versions,allocated.allocations(),request.amount().subtract(allocated.unallocatedAmount()),allocated.unallocatedAmount(),fingerprint));
+  return new State(account,receipt,lines,new SettlementPreviewResponse(receipt.getVersion(),versions,allocated.allocations(),request.amount().subtract(allocated.unallocatedAmount()),allocated.unallocatedAmount(),fingerprint));
  }
  /** 核对所选业务组数量以及客户、主体和结算币种。 */
  private void checkGroups(List<ArGroup> groups,List<Long> ids,ArReceipt receipt){

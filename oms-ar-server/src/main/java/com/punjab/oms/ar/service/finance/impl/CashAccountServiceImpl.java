@@ -53,6 +53,41 @@ public class CashAccountServiceImpl implements CashAccountService {
         return row.getId();
     }
 
+    /** 止付后，保留余额和冻结明细，出账入口依据状态拒绝新增核销。 */
+    @Transactional(rollbackFor=Exception.class)
+    public Long stop(CashStatusRequest request) {
+        return transition(request,"ACTIVE","STOPPED","ar:cash:stop","CASH_ACCOUNT_STOPPED");
+    }
+
+    /** 解除整户止付时继续保留各批次原冻结金额。 */
+    @Transactional(rollbackFor=Exception.class)
+    public Long resume(CashStatusRequest request) {
+        return transition(request,"STOPPED","ACTIVE","ar:cash:resume","CASH_ACCOUNT_RESUMED");
+    }
+
+    /** 锁定账户并复核状态及版本，状态变更与金额快照在同一事务提交。 */
+    private Long transition(CashStatusRequest request,String from,String to,String permission,String action) {
+        validate(request);
+        var ticket=journal.begin(new JournalBeginRequest(request.legalEntityId(),permission,action,request.requestKey(),values.json(request)));
+        if(ticket.resultReference()!=null) return ticket.resultReference();
+        var row=accounts.account(request.accountId(),request.legalEntityId(),true);
+        if(row==null || !from.equals(row.getStatus()) || !request.expectedVersion().equals(row.getVersion()))
+            throw new ServiceException("现金账户状态或版本已变化，请刷新");
+        String before=values.json(row);
+        long previous=row.getVersion();
+        row.setStatus(to);
+        row.setVersion(previous+1);
+        row.setUpdatedBy(ticket.actor());
+        row.setUpdatedTime(java.time.LocalDateTime.now());
+        if(!accounts.updateStatus(row,previous)) throw new ServiceException("现金账户版本冲突");
+        var change=new JournalEventRequest.Change("CASH_ACCOUNT",row.getId(),before,
+                values.json(java.util.Map.of("status",to)),values.json(row),previous,row.getVersion());
+        journal.append(new JournalEventRequest(action,ticket.actor(),request.reason(),"CASH_ACCOUNT",
+                row.getId().toString(),"cash-status:"+ticket.id(),null,List.of(change)),ticket);
+        journal.complete(ticket,row.getId());
+        return row.getId();
+    }
+
     /** 仅返回授权主体下该账户的现金余额与冻结额。 */
     public CashAccountResponse detail(BalanceDetailQuery query) {
         validate(query);

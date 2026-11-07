@@ -14,6 +14,7 @@ public interface CashAccountDao {
     String batchSnapshot(Long eventId, Long operationId);
     boolean insertLot(ArCashReceiptLot lot);
     boolean updateBook(ArCashAccount account, Long expectedVersion);
+    boolean updateStatus(ArCashAccount row, Long previousVersion);
     boolean create(ArCashAccount row);
     ArCashAccount find(Long id, Long legalEntityId);
 }

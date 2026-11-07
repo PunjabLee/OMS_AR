@@ -53,7 +53,7 @@ def main():
     env = {k: v for k, v in os.environ.items() if not k.startswith(('DB_', 'AR_', 'SPRING_', 'SERVER_'))}
     env.update(DB_URL=f'jdbc:mysql://127.0.0.1:13306/{database}', DB_USERNAME='oms_ar', DB_PASSWORD=password,
                AR_JDK_HOME=settings.get('AR_JDK_HOME', DEFAULT_JDK), AR_API_TOKEN=token, AR_API_USER='startup-verification',
-               AR_LEGAL_ENTITIES='1', AR_PERMISSIONS='ar:cash:open,ar:cash:read,ar:create,ar:read,ar:receipt:create,ar:settle,ar:reverse,ar:invoice:write,ar:void,ar:outbox:read,ar:outbox:retry',
+               AR_LEGAL_ENTITIES='1', AR_PERMISSIONS='ar:cash:stop,ar:cash:resume,ar:cash:open,ar:cash:read,ar:create,ar:read,ar:receipt:create,ar:settle,ar:reverse,ar:invoice:write,ar:void,ar:outbox:read,ar:outbox:retry',
                SERVER_ADDRESS='127.0.0.1', SERVER_PORT='0', AR_OUTBOX_ENABLED='false', AR_OUTBOX_SCHEDULING_ENABLED='false',
                AR_CASH_BINDING_SCOPES='1/7/CNY', AR_DATABASE_VERIFY_SCHEMA='true', SPRING_FLYWAY_ENABLED='true', SPRING_PROFILES_ACTIVE='')
     process = None
@@ -179,6 +179,20 @@ def main():
         assert api(port,f'receipts/detail?id={receipt_aa}&legalEntityId=1')['availableAmount'] == 100
         assert api(port,f'receipts/detail?id={second_receipt}&legalEntityId=1')['availableAmount'] == 80
         api(port,'cash-accounts/settlements/preview',dict(fifo,groupIds=[ab_group]),status=409)
+        def switch_cash(action):
+            row = api(port,f'cash-accounts/detail?id={aa}&legalEntityId=1')
+            command = dict(accountId=aa,legalEntityId=1,requestKey=key(),reason='账户止付验收',expectedVersion=row['version'])
+            assert api(port,'cash-accounts/'+action,command) == aa
+            assert api(port,'cash-accounts/'+action,command) == aa
+            api(port,'cash-accounts/'+action,dict(command,requestKey=key()),status=409)
+        switch_cash('stop')
+        api(port,'settlements/preview',direct,status=409)
+        api(port,'cash-accounts/settlements/preview',fifo,status=409)
+        api(port,'receipts/create',dict(deposit,requestKey=key(),sourceId=key(),amount=1))
+        assert cash_amount(aa) == 181
+        switch_cash('resume')
+        assert api(port,'cash-accounts/settlements/preview',fifo)['usedAmount'] == 60
+        report['checks'].append('cash stop/resume: both debit paths blocked, deposits accepted and replay safe')
         report['checks'].append('shared receipt lots: direct limit, FIFO split, stale requests and original receipt reversal')
         report['checks'].append('receipt deposits: idempotent posting, scoped settlement and exact reversal')
         report['checks'].append('cash ownership: shared price/tax account, inherited adjustments and rejected mismatches')

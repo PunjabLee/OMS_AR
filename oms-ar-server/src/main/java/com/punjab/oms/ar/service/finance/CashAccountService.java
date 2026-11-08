@@ -10,6 +10,7 @@ public interface CashAccountService {
     Long resume(CashStatusRequest request);
     Long close(CashStatusRequest request);
     Long reopen(CashStatusRequest request);
+    java.util.List<CashAccountResponse> forCustomer(com.punjab.oms.ar.domain.query.finance.CashCustomerQuery query);
     Long open(CashAccountOpenRequest request);
     CashAccountResponse detail(BalanceDetailQuery query);
 }

@@ -103,6 +103,13 @@ public class CashAccountServiceImpl implements CashAccountService {
         return row.getId();
     }
 
+    /** 以指定主体、客户、币种分别返回各开票类型的资金，不跨账户合计可用额。 */
+    public List<CashAccountResponse> forCustomer(com.punjab.oms.ar.domain.query.finance.CashCustomerQuery query) {
+        validate(query);
+        CurrentUser.require(query.legalEntityId(),"ar:cash:read");
+        return accounts.forCustomer(converter.toScope(query)).stream().map(converter::toResponse).toList();
+    }
+
     /** 仅返回授权主体下该账户的现金余额与冻结额。 */
     public CashAccountResponse detail(BalanceDetailQuery query) {
         validate(query);

@@ -197,6 +197,11 @@ def main():
         assert cash_amount(aa) == 181
         switch_cash('resume')
         assert api(port,'cash-accounts/settlements/preview',fifo)['usedAmount'] == 60
+        accounts_path = 'cash-accounts/by-customer?customerId=7&currency=CNY&legalEntityId='
+        summary = api(port,accounts_path+'1')
+        assert [(a['id'],a['availableAmount']) for a in summary] == [(aa,181),(ab,0)]
+        api(port,accounts_path+'2',status=403)
+        assert api(port,'cash-accounts/by-customer?customerId=7&currency=USD&legalEntityId=1') == []
         history = dict(legalEntityId=1,accountId=aa,page=1,size=200)
         batches = api(port,'cash-accounts/lots/page',history)
         assert batches['total'] == 3 and sum(lot['available'] for lot in batches['records']) == 181

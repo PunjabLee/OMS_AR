@@ -18,6 +18,7 @@ public interface CashAccountDao {
     boolean markReversed(Long lotId,Long operationId,java.math.BigDecimal amount,String reason,String actor);
     boolean insertLot(ArCashReceiptLot lot);
     boolean updateBook(ArCashAccount account, Long expectedVersion);
+    java.util.List<ArCashAccount> forCustomer(com.punjab.oms.ar.domain.bo.finance.CashCustomerScope scope);
     boolean hasOpenDependencies(Long id);
     boolean updateStatus(ArCashAccount row, Long previousVersion);
     boolean create(ArCashAccount row);

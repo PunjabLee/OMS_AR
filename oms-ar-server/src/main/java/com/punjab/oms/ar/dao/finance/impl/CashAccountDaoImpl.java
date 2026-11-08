@@ -69,6 +69,11 @@ public class CashAccountDaoImpl extends CrudRepository<ArCashAccountMapper,ArCas
                 .set(ArCashAccount::getUpdatedTime,account.getUpdatedTime()).set(ArCashAccount::getUpdatedBy,account.getUpdatedBy()).update();
     }
 
+    public java.util.List<ArCashAccount> forCustomer(com.punjab.oms.ar.domain.bo.finance.CashCustomerScope scope) {
+        return lambdaQuery().eq(ArCashAccount::getLegalEntityId,scope.legalEntityId())
+                .eq(ArCashAccount::getCustomerId,scope.customerId()).eq(ArCashAccount::getCurrency,scope.currency())
+                .eq(ArCashAccount::getDeleteStatus,false).orderByAsc(ArCashAccount::getInvoiceMode).list();
+    }
     public boolean hasOpenDependencies(Long id) { return baseMapper.hasOpenDependencies(id); }
     public boolean updateStatus(ArCashAccount row, Long previousVersion) {
         return lambdaUpdate().eq(ArCashAccount::getId,row.getId()).eq(ArCashAccount::getVersion,previousVersion)

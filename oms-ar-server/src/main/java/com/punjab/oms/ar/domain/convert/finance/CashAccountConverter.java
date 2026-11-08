@@ -8,6 +8,7 @@ import com.punjab.oms.ar.domain.vo.finance.CashAccountResponse;
 /** 现金账户开户与余额响应映射。 @author Punjab */
 @Mapper(componentModel="spring",unmappedTargetPolicy=ReportingPolicy.IGNORE)
 public interface CashAccountConverter {
+    com.punjab.oms.ar.domain.bo.finance.CashCustomerScope toScope(com.punjab.oms.ar.domain.query.finance.CashCustomerQuery query);
     ArCashAccount toEntity(CashAccountOpenRequest request);
     CashAccountResponse toResponse(ArCashAccount row);
 }

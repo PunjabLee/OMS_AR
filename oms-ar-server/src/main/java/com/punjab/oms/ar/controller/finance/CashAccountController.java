@@ -40,6 +40,13 @@ public class CashAccountController {
     public ApiReturn<Long> resume(@Valid @RequestBody CashStatusRequest request) {
         return ApiReturn.of(service.resume(request));
     }
+    @Operation(summary="按客户查询现金账户余额",description="按客户查询现金账户余额")
+    @GetMapping("/by-customer")
+    public ApiReturn<java.util.List<CashAccountResponse>> forCustomer(
+            @Valid @ModelAttribute com.punjab.oms.ar.domain.query.finance.CashCustomerQuery query) {
+        return ApiReturn.of(service.forCustomer(query));
+    }
+
     @Operation(summary="开设现金账户",description="开设现金账户") @PostMapping("/open")
     public ApiReturn<Long> open(@Valid @RequestBody CashAccountOpenRequest request) {
         return ApiReturn.of(service.open(request));

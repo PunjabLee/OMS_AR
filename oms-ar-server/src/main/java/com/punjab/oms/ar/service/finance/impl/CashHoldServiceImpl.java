@@ -25,6 +25,7 @@ public class CashHoldServiceImpl implements CashHoldService {
  private final FinanceValues values;
  private final Validator validator;
 
+ /** 手工冻结前预留请求键，同一请求重放时返回原冻结单。 */
  @Transactional(rollbackFor=Exception.class)
  public Long freeze(Freeze r){
   validate(r);
@@ -34,6 +35,7 @@ public class CashHoldServiceImpl implements CashHoldService {
   journal.complete(ticket,id);
   return id;
  }
+ /** 按指定金额退回原手工冻结批次，解冻结果和幂等记录一并提交。 */
  @Transactional(rollbackFor=Exception.class)
  public Long unfreeze(Release r){
   validate(r);
@@ -43,18 +45,22 @@ public class CashHoldServiceImpl implements CashHoldService {
   journal.complete(ticket,r.holdId());
   return r.holdId();
  }
+ /** 在提现申请事务中按充值顺序冻结全额，并返回与申请绑定的冻结单。 */
  @Transactional(propagation=Propagation.MANDATORY)
  public Long reserveWithdrawal(Long scope,Long accountId,BigDecimal amount,JournalTicket ticket,String reason){
   return reserve(scope,accountId,amount,"WITHDRAWAL",ticket,reason);
  }
+ /** 付款成功后扣划该笔提现剩余的全部冻结额。已认领的付款可在止付后登记结果。 */
  @Transactional(propagation=Propagation.MANDATORY)
  public void captureWithdrawal(Long scope,Long accountId,Long holdId,JournalTicket ticket,String reason){
   finish(scope,accountId,holdId,null,"WITHDRAWAL",true,ticket,reason);
  }
+ /** 拒绝、撤销或确认付款失败时，将该笔提现尚未扣划的资金退回原批次。 */
  @Transactional(propagation=Propagation.MANDATORY)
  public void releaseWithdrawal(Long scope,Long accountId,Long holdId,JournalTicket ticket,String reason){
   finish(scope,accountId,holdId,null,"WITHDRAWAL",false,ticket,reason);
  }
+ /** 先锁账户并核对可用额，再按批次逐笔占款。批次资金不足会回滚已经写入的分摊。 */
  private Long reserve(Long scope,Long accountId,BigDecimal amount,String purpose,JournalTicket ticket,String reason){
   var account=lockedAccount(scope,accountId,ticket);
   values.positiveMoney(account.getCurrency(),amount);
@@ -87,6 +93,7 @@ public class CashHoldServiceImpl implements CashHoldService {
   append("CASH_HOLD_PLACED",hold.getId(),reason,ticket,changes);
   return hold.getId();
  }
+ /** 锁定原冻结单和分摊，逐笔解冻或扣划。仅扣划减少账面额，两种操作都减少冻结额。 */
  private void finish(Long scope,Long accountId,Long id,BigDecimal requested,String purpose,boolean capture,JournalTicket ticket,String reason){
   var account=lockedAccount(scope,accountId,ticket);
   var hold=dao.hold(id,accountId,true);
@@ -120,6 +127,7 @@ public class CashHoldServiceImpl implements CashHoldService {
   changeAccount(account,amount.negate(),capture?amount.negate():ZERO,ticket.actor(),changes);
   append(capture?"CASH_HOLD_CAPTURED":"CASH_HOLD_RELEASED",id,reason,ticket,changes);
  }
+ /** 在同一快照读取账户内的冻结单及原分摊，以原额减去累计释放额、扣划额得出剩余额。 */
  @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
  public CashHoldView detail(Long scope,Long accountId,Long id){
   CurrentUser.require(scope,"ar:cash:read");
@@ -129,12 +137,14 @@ public class CashHoldServiceImpl implements CashHoldService {
   var slices=dao.slices(id,false).stream().map(s->new CashHoldView.Slice(s.getLotId(),s.getAmount(),s.getReleasedAmount(),s.getCapturedAmount())).toList();
   return new CashHoldView(id,accountId,hold.getPurpose(),hold.getAmount(),hold.getReleasedAmount(),hold.getCapturedAmount(),hold.getAmount().subtract(hold.getReleasedAmount()).subtract(hold.getCapturedAmount()),slices);
  }
+ /** 核对幂等操作的主体与账户归属，取得账户锁后再读取冻结单及批次。 */
  private ArCashAccount lockedAccount(Long scope,Long id,JournalTicket ticket){
   if(!scope.equals(ticket.legalEntityId()))throw new ServiceException("冻结操作主体不一致");
   var account=dao.account(id,scope,true);
   if(account==null)throw new ServiceException("账户不存在或不可访问");
   return account;
  }
+ /** 将冻结与账面增量应用到账户，重算可用额并保存版本递增前后的金额。 */
  private void changeAccount(ArCashAccount account,BigDecimal frozen,BigDecimal book,String actor,List<Change> changes){
   String before=values.json(account);long version=account.getVersion();
   account.setBookAmount(account.getBookAmount().add(book));
@@ -143,21 +153,27 @@ public class CashHoldServiceImpl implements CashHoldService {
   account.setVersion(version+1);touch(account,actor);dao.update(account);
   changes.add(change("CASH_ACCOUNT",account,before,Map.of("bookAmount",book,"frozenAmount",frozen,"availableAmount",book.subtract(frozen)),version,version+1));
  }
+ /** 把冻结或提现增量计入对应充值批次，保留批次变动前后的快照。 */
  private void changeLot(ArCashReceiptLot lot,BigDecimal frozen,BigDecimal withdrawn,String actor,List<Change> changes){
   String before=values.json(lot);
   lot.setFrozenAmount(lot.getFrozenAmount().add(frozen));lot.setWithdrawnAmount(lot.getWithdrawnAmount().add(withdrawn));
   touch(lot,actor);dao.update(lot);
   changes.add(change("CASH_RECEIPT_LOT",lot,before,Map.of("frozenAmount",frozen,"withdrawnAmount",withdrawn),0L,0L));
  }
+ /** 为新冻结单或新分摊记录初始快照，初始版本为零。 */
  private Change initial(String type,ArBaseEntity row){
   String json=values.json(row);return new Change(type,row.getId(),null,json,json,null,0L);
  }
+ /** 为已有对象组装变动前快照、实际增量和变动后快照。 */
  private Change change(String type,ArBaseEntity row,String before,Object delta,Long oldVersion,Long newVersion){
   return new Change(type,row.getId(),before,values.json(delta),values.json(row),oldVersion,newVersion);
  }
+ /** 以冻结单为触发对象记录事件，沿用调用方的幂等操作关联号。 */
  private void append(String action,Long id,String reason,JournalTicket ticket,List<Change> changes){
   journal.append(new JournalEventRequest(action,ticket.actor(),reason,"CASH_HOLD",id.toString(),"cash-hold:"+ticket.id(),null,changes),ticket);
  }
+ /** 将本次操作人和更新时间写入被变更的资金记录。 */
  private void touch(ArBaseEntity row,String actor){row.setUpdatedBy(actor);row.setUpdatedTime(LocalDateTime.now());}
+ /** 在预留请求键前校验冻结或解冻请求。 */
  private void validate(Object request){if(request==null || !validator.validate(request).isEmpty())throw new ServiceException("冻结请求无效");}
 }

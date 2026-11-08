@@ -9,6 +9,7 @@ import java.util.Objects;
 final class CreditReversalLocks {
     private CreditReversalLocks() {}
 
+    /** 普通读定位归属，先锁现金账户再锁信用账户，并复核归属。历史未分户账户仅锁信用账户。 */
     static ArCustomerAccount lockAccount(CustomerBalanceDao balances, CashGroupOwnership ownership,
                                          Long accountId, Long legalEntityId) {
         var reference = balances.account(accountId, legalEntityId, false);

@@ -2,7 +2,7 @@
 
 [手册目录](README.md) · [正式迁移 SQL](../../oms-ar-server/src/main/resources/db/migration)
 
-以 V001–V012 的 21 张业务表、29 条物理外键为范围。图中省略表名前缀 `oms_ar_`。先看全景，再按业务查看主键、关联字段和复合外键的完整列序。
+以 V001–V020 的 30 张业务表、42 条物理外键为范围。图中省略表名前缀 `oms_ar_`。先看全景，再按业务查看主键、关联字段和复合外键的完整列序。
 
 ## 全景
 
@@ -60,6 +60,28 @@ erDiagram
     lifecycle_event ||..o{ outbox : "事件通知"
     outbox ||..o{ outbox_retry : "通知重试历史"
     operation_request ||..o| outbox_retry : "重试操作凭据"
+    cash_account
+    cash_group_binding
+    cash_receipt_lot
+    cash_hold
+    cash_hold_slice
+    payout_account
+    withdrawal
+    cash_receipt_reversal
+    cash_cutover
+    business_group ||..o| cash_group_binding : "业务组归属"
+    cash_account ||..o{ cash_group_binding : "绑定现金账户"
+    receipt ||..o| cash_receipt_lot : "原收款充值批次"
+    cash_account ||..o{ cash_receipt_lot : "批次所属账户"
+    cash_account ||..o{ cash_hold : "账户冻结单"
+    cash_hold ||..o{ cash_hold_slice : "原冻结单切片"
+    cash_receipt_lot ||..o{ cash_hold_slice : "冻结来源批次"
+    cash_account ||..o{ withdrawal : "提现出款账户"
+    payout_account ||..o{ withdrawal : "提现收款账户"
+    cash_hold ||..o| withdrawal : "提现专属冻结"
+    cash_account o|..o| customer_account : "信用分户归属"
+    cash_receipt_lot ||..o| cash_receipt_reversal : "原充值批次冲正"
+    operation_request ||..o| cash_receipt_reversal : "冲正操作凭据"
 ```
 
 ## 应收、来源与调整
@@ -321,6 +343,180 @@ erDiagram
 | `fk_outbox_event` | `outbox(event_id)` | `lifecycle_event(id)` |
 | `fk_outbox_retry_outbox` | `outbox_retry(outbox_id)` | `outbox(id)` |
 | `fk_outbox_retry_operation` | `outbox_retry(operation_id)` | `operation_request(id)` |
+
+## 现金账户、冻结与提现
+
+业务组和充值批次通过复合外键核对客户、主体及币种。冻结单记录总额，各切片记录具体占用的充值批次。提现单引用专属冻结单和收款账户。V018 为信用账户增加可空的现金归属，同一结算范围内按现金账户区分信用余额。冲正记录通过两个唯一键分别对应原批次和幂等操作。V020 按结算范围唯一保存切换清单和期初核对报告。
+
+```mermaid
+erDiagram
+    cash_account {
+        BIGINT id PK "记录主键"
+        BIGINT customer_id "客户编号"
+        BIGINT legal_entity_id "核算主体编号"
+        CHAR currency "结算币种"
+        VARCHAR invoice_mode "开票模式"
+        VARCHAR status "业务状态"
+        DECIMAL book_amount "账面金额"
+        DECIMAL frozen_amount "已冻结金额"
+        DECIMAL available_amount "可用金额"
+        BIGINT version "并发版本"
+        DATETIME created_time "创建时间"
+        VARCHAR created_by "创建人"
+        DATETIME updated_time "更新时间"
+        VARCHAR updated_by "更新人"
+        BOOLEAN delete_status "逻辑删除标志"
+    }
+    cash_group_binding {
+        BIGINT id PK "记录主键"
+        BIGINT group_id FK "应收业务组编号"
+        BIGINT cash_account_id FK "现金账户编号"
+        BIGINT customer_id FK "客户编号"
+        BIGINT legal_entity_id FK "核算主体编号"
+        CHAR currency FK "结算币种"
+        DATETIME created_time "创建时间"
+        VARCHAR created_by "创建人"
+        DATETIME updated_time "更新时间"
+        VARCHAR updated_by "更新人"
+        BOOLEAN delete_status "逻辑删除标志"
+    }
+    cash_receipt_lot {
+        BIGINT id PK "记录主键"
+        BIGINT receipt_id FK "实际收款编号"
+        BIGINT cash_account_id FK "现金账户编号"
+        BIGINT customer_id FK "客户编号"
+        BIGINT legal_entity_id FK "核算主体编号"
+        CHAR currency FK "结算币种"
+        DECIMAL frozen_amount "已冻结金额"
+        DECIMAL withdrawn_amount "累计提现金额"
+        DATETIME created_time "创建时间"
+        VARCHAR created_by "创建人"
+        DATETIME updated_time "更新时间"
+        VARCHAR updated_by "更新人"
+        BOOLEAN delete_status "逻辑删除标志"
+    }
+    cash_hold {
+        BIGINT id PK "记录主键"
+        BIGINT cash_account_id FK "现金账户编号"
+        VARCHAR purpose "冻结用途"
+        DECIMAL amount "业务金额"
+        DECIMAL released_amount "累计解冻金额"
+        DECIMAL captured_amount "累计支付金额"
+        BIGINT version "并发版本"
+        DATETIME created_time "创建时间"
+        VARCHAR created_by "创建人"
+        DATETIME updated_time "更新时间"
+        VARCHAR updated_by "更新人"
+        BOOLEAN delete_status "逻辑删除标志"
+    }
+    cash_hold_slice {
+        BIGINT id PK "记录主键"
+        BIGINT hold_id FK "冻结单编号"
+        BIGINT cash_account_id FK "现金账户编号"
+        BIGINT lot_id FK "充值批次编号"
+        DECIMAL amount "业务金额"
+        DECIMAL released_amount "累计解冻金额"
+        DECIMAL captured_amount "累计支付金额"
+        DATETIME created_time "创建时间"
+        VARCHAR created_by "创建人"
+        DATETIME updated_time "更新时间"
+        VARCHAR updated_by "更新人"
+        BOOLEAN delete_status "逻辑删除标志"
+    }
+    payout_account {
+        BIGINT id PK "记录主键"
+        BIGINT legal_entity_id "核算主体编号"
+        BIGINT customer_id "客户编号"
+        CHAR currency "结算币种"
+        VARCHAR beneficiary_ref "受益人引用"
+        CHAR account_last_four "收款账号末四位"
+        VARCHAR status "业务状态"
+        BIGINT version "并发版本"
+        VARCHAR created_by "创建人"
+        VARCHAR updated_by "更新人"
+        DATETIME created_time "创建时间"
+        DATETIME updated_time "更新时间"
+        BOOLEAN delete_status "逻辑删除标志"
+    }
+    withdrawal {
+        BIGINT id PK "记录主键"
+        BIGINT customer_id FK "客户编号"
+        BIGINT legal_entity_id FK "核算主体编号"
+        CHAR currency FK "结算币种"
+        BIGINT cash_account_id FK "现金账户编号"
+        BIGINT payout_account_id FK "收款账户编号"
+        BIGINT hold_id FK "冻结单编号"
+        DECIMAL amount "业务金额"
+        VARCHAR status "业务状态"
+        VARCHAR reviewer "审核人"
+        VARCHAR claimed_by "认领人"
+        VARCHAR bank_receipt "银行回单号"
+        VARCHAR evidence "处理凭证"
+        BIGINT version "并发版本"
+        VARCHAR created_by "创建人"
+        VARCHAR updated_by "更新人"
+        DATETIME created_time "创建时间"
+        DATETIME updated_time "更新时间"
+        BOOLEAN delete_status "逻辑删除标志"
+    }
+    cash_receipt_reversal {
+        BIGINT id PK "记录主键"
+        BIGINT lot_id FK "充值批次编号"
+        BIGINT operation_id FK "幂等操作编号"
+        DECIMAL amount "业务金额"
+        VARCHAR reason "冲正原因"
+        DATETIME created_time "创建时间"
+        VARCHAR created_by "创建人"
+        DATETIME updated_time "更新时间"
+        VARCHAR updated_by "更新人"
+        BOOLEAN delete_status "逻辑删除标志"
+    }
+    cash_cutover {
+        BIGINT id PK "记录主键"
+        BIGINT legal_entity_id "核算主体编号"
+        BIGINT customer_id "客户编号"
+        CHAR currency "结算币种"
+        CHAR manifest_hash "历史映射清单摘要"
+        CHAR fingerprint "切换前状态指纹"
+        JSON manifest "历史映射清单"
+        JSON opening_report "期初核对报告"
+        VARCHAR created_by "创建人"
+        DATETIME created_time "创建时间"
+    }
+    customer_account {
+        BIGINT cash_account_id FK "分户对应的现金账户，可为空"
+        BIGINT cash_scope_key "唯一键使用的归属值，未分户为零"
+    }
+    business_group ||..o| cash_group_binding : "业务组归属"
+    cash_account ||..o{ cash_group_binding : "绑定现金账户"
+    receipt ||..o| cash_receipt_lot : "原收款充值批次"
+    cash_account ||..o{ cash_receipt_lot : "批次所属账户"
+    cash_account ||..o{ cash_hold : "账户冻结单"
+    cash_hold ||..o{ cash_hold_slice : "原冻结单切片"
+    cash_receipt_lot ||..o{ cash_hold_slice : "冻结来源批次"
+    cash_account ||..o{ withdrawal : "提现出款账户"
+    payout_account ||..o{ withdrawal : "提现收款账户"
+    cash_hold ||..o| withdrawal : "提现专属冻结"
+    cash_account o|..o| customer_account : "信用分户归属"
+    cash_receipt_lot ||..o| cash_receipt_reversal : "原充值批次冲正"
+    operation_request ||..o| cash_receipt_reversal : "冲正操作凭据"
+```
+
+| 外键约束 | 子表引用列 | 父表匹配列 |
+| --- | --- | --- |
+| `fk_cash_binding_group` | `cash_group_binding(group_id,customer_id,legal_entity_id,currency)` | `business_group(id,customer_id,legal_entity_id,currency)` |
+| `fk_cash_binding_account` | `cash_group_binding(cash_account_id,customer_id,legal_entity_id,currency)` | `cash_account(id,customer_id,legal_entity_id,currency)` |
+| `fk_cash_lot_receipt` | `cash_receipt_lot(receipt_id,customer_id,legal_entity_id,currency)` | `receipt(id,customer_id,legal_entity_id,currency)` |
+| `fk_cash_lot_account` | `cash_receipt_lot(cash_account_id,customer_id,legal_entity_id,currency)` | `cash_account(id,customer_id,legal_entity_id,currency)` |
+| V016 未显式命名 | `cash_hold(cash_account_id)` | `cash_account(id)` |
+| V016 未显式命名 | `cash_hold_slice(hold_id,cash_account_id)` | `cash_hold(id,cash_account_id)` |
+| V016 未显式命名 | `cash_hold_slice(lot_id)` | `cash_receipt_lot(id)` |
+| `fk_withdrawal_cash` | `withdrawal(cash_account_id,customer_id,legal_entity_id,currency)` | `cash_account(id,customer_id,legal_entity_id,currency)` |
+| `fk_withdrawal_payout` | `withdrawal(payout_account_id,customer_id,legal_entity_id,currency)` | `payout_account(id,customer_id,legal_entity_id,currency)` |
+| `fk_withdrawal_hold` | `withdrawal(hold_id,cash_account_id)` | `cash_hold(id,cash_account_id)` |
+| `fk_credit_cash_scope` | `customer_account(cash_account_id,customer_id,legal_entity_id,currency)` | `cash_account(id,customer_id,legal_entity_id,currency)` |
+| `fk_cash_reversal_lot` | `cash_receipt_reversal(lot_id)` | `cash_receipt_lot(id)` |
+| `fk_cash_reversal_operation` | `cash_receipt_reversal(operation_id)` | `operation_request(id)` |
 
 ## 服务层维护的业务引用
 

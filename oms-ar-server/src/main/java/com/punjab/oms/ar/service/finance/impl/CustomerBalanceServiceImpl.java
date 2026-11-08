@@ -37,10 +37,12 @@ public class CustomerBalanceServiceImpl implements CustomerBalanceService {
   validate(request);var ticket=journal.begin(new JournalBeginRequest(request.legalEntityId(),"ar:reverse","BALANCE_TRANSFER_REVERSE",request.requestKey(),values.json(request)));
   if(ticket.resultReference()!=null)return ticket.resultReference();
   var lot=dao.lot(request.lotId(),request.legalEntityId(),false);if(lot==null)throw new ServiceException("余额来源批次不存在");
-  var account=dao.account(lot.getAccountId(),request.legalEntityId(),true);if(account==null)throw new ServiceException("客户账户不存在");
-  lot=dao.lot(lot.getId(),request.legalEntityId(),true);
   if("REVERSED".equals(lot.getStatus())){journal.complete(ticket,lot.getId());return lot.getId();}
-  if(account.getCashAccountId()!=null) ownership.lockOpen(account.getCashAccountId(),request.legalEntityId());
+  var account=CreditReversalLocks.lockAccount(dao,ownership,lot.getAccountId(),request.legalEntityId());
+  lot=dao.lot(lot.getId(),request.legalEntityId(),true);
+  if(lot==null || !account.getId().equals(lot.getAccountId()))throw new ServiceException("批次归属已变化，请重试");
+  if("REVERSED".equals(lot.getStatus())){journal.complete(ticket,lot.getId());return lot.getId();}
+
   if(lot.getUsedAmount().signum()!=0)throw new ServiceException("该批次已被抵扣，请先撤销对应余额核销");
   var line=receivables.line(lot.getSourceLineId(),false);checkLine(line,request.legalEntityId());receivables.group(line.getGroupId());line=receivables.line(line.getId(),true);checkLine(line,request.legalEntityId());
   var changes=new ArrayList<JournalEventRequest.Change>();changes.add(moveLine(line,lot.getAmount().negate(),ticket.actor()));changes.add(moveAccount(account,lot.getAmount().negate(),ticket.actor()));

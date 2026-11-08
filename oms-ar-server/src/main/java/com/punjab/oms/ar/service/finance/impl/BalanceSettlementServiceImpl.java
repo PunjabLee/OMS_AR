@@ -44,9 +44,8 @@ public class BalanceSettlementServiceImpl implements BalanceSettlementService {
   if(settlement==null || !"BALANCE".equals(settlement.getSettlementType()))throw new ServiceException("余额核销单不存在或不可访问");
   if("REVERSED".equals(settlement.getStatus())){journal.complete(ticket,settlement.getId());return settlement.getId();}
   var source=sources.source(settlement.getId());if(source==null)throw new ServiceException("原核销账户记录缺失");
-  var account=balances.account(source.getAccountId(),request.legalEntityId(),true);
-  if(account==null || !account.getCustomerId().equals(settlement.getCustomerId()) || !account.getCurrency().equals(settlement.getCurrency()))throw new ServiceException("原核销账户范围不一致");
-  if(account.getCashAccountId()!=null) ownership.lockOpen(account.getCashAccountId(),request.legalEntityId());
+  var account=CreditReversalLocks.lockAccount(balances,ownership,source.getAccountId(),request.legalEntityId());
+  if(!account.getCustomerId().equals(settlement.getCustomerId()) || !account.getCurrency().equals(settlement.getCurrency()))throw new ServiceException("原核销账户范围不一致");
   var usages=sources.usages(settlement.getId());var allocations=settlements.allocations(settlement.getId());
   if(usages.isEmpty() || allocations.isEmpty())throw new ServiceException("原核销分配缺失");
   var lotIds=usages.stream().map(ArBalanceUsage::getLotId).distinct().sorted().toList();var lots=sources.lots(lotIds,true);

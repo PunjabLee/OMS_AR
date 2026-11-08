@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 @Service @RequiredArgsConstructor
 public class ReceivableQueryServiceImpl implements ReceivableQueryService {
  private final ReceivableDao dao;
+ private final CashGroupOwnership ownership;
  private final ReceivableConverter converter;
  private final Validator validator;
  /** 在同一快照读取单头、来源、调整与汇率依据，逐行判断结算程度并分别汇总价税。 */
@@ -32,7 +33,14 @@ public class ReceivableQueryServiceImpl implements ReceivableQueryService {
   var sources=dao.sources(lines.stream().map(ArLine::getId).toList()).stream().collect(Collectors.toMap(ArSource::getLineId,Function.identity()));
   var exchangeBases=dao.exchangeBases(lines.stream().map(ArLine::getId).toList()).stream().collect(Collectors.toMap(ArExchangeBasis::getLineId,Function.identity()));
   var adjustments=dao.adjustmentLinks(lines.stream().map(ArLine::getId).toList()).stream().collect(Collectors.toMap(ArAdjustmentLink::getLineId,Function.identity()));
-  var result=lines.stream().map(line->converter.toResponse(line,converter.toResponse(sources.get(line.getId())),converter.toResponse(exchangeBases.get(line.getId())),converter.toResponse(adjustments.get(line.getId())))).toList();
+  var owners=ownership.groupAccounts(document.getLegalEntityId(),document.getCustomerId(),document.getCurrency(),
+          lines.stream().map(ArLine::getGroupId).distinct().toList());
+  var result=lines.stream().map(line->{
+      var account=owners.get(line.getGroupId());
+      return converter.toResponse(line,converter.toResponse(sources.get(line.getId())),
+              converter.toResponse(exchangeBases.get(line.getId())),converter.toResponse(adjustments.get(line.getId())),
+              account==null?null:account.getId(),account==null?null:account.getInvoiceMode());
+  }).toList();
   var active=lines.stream().filter(line->"ACTIVE".equals(line.getStatus())).toList();
   String state;
   if("VOID".equals(document.getStatus()))state="VOID";

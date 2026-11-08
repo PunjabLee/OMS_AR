@@ -132,6 +132,8 @@ def main():
         create_bound([dict(tax, invoiceMode='NO_INVOICE')], 409)
         create_bound([price], 409)
         create_bound([dict(price, invoiceMode='NO_INVOICE'), dict(tax, invoiceMode='INVOICE')], 409)
+        aa_detail = api(port,f'receivables/detail?id={doc_aa}&legalEntityId=1')
+        assert [(line['cashAccountId'],line['invoiceMode']) for line in aa_detail['lines']] == [(aa,'INVOICE')]*2
         ab_line = api(port, f'receivables/detail?id={doc_ab}&legalEntityId=1')['lines'][0]
         ab_group = ab_line['groupId']
         eligibility = api(port, 'invoice-links/eligibility', dict(legalEntityId=1, customerId=7, currency='CNY', groupIds=[ab_group]))

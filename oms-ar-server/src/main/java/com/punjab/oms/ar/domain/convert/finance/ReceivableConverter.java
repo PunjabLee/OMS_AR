@@ -19,5 +19,5 @@ public interface ReceivableConverter {
  com.punjab.oms.ar.domain.vo.finance.ReceivableResponse.ExchangeBasis toResponse(ArExchangeBasis entity);
  com.punjab.oms.ar.domain.vo.finance.ReceivableResponse.Document toResponse(ArDocument entity);
  com.punjab.oms.ar.domain.vo.finance.ReceivableResponse.Source toResponse(ArSource entity);
- com.punjab.oms.ar.domain.vo.finance.ReceivableResponse.Line toResponse(ArLine line,com.punjab.oms.ar.domain.vo.finance.ReceivableResponse.Source source,com.punjab.oms.ar.domain.vo.finance.ReceivableResponse.ExchangeBasis exchangeBasis,com.punjab.oms.ar.domain.vo.finance.ReceivableResponse.Adjustment adjustment);
+ com.punjab.oms.ar.domain.vo.finance.ReceivableResponse.Line toResponse(ArLine line,com.punjab.oms.ar.domain.vo.finance.ReceivableResponse.Source source,com.punjab.oms.ar.domain.vo.finance.ReceivableResponse.ExchangeBasis exchangeBasis,com.punjab.oms.ar.domain.vo.finance.ReceivableResponse.Adjustment adjustment,Long cashAccountId,String invoiceMode);
 }

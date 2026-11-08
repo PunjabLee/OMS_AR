@@ -78,7 +78,11 @@ public record ReceivableResponse(
     /** 原币金额和汇率折算依据 */
     ExchangeBasis exchangeBasis,
     /** 负数应收的原组与原行关联 */
-    Adjustment adjustment){}
+    Adjustment adjustment,
+    /** 分户范围内的现金账户ID。 */
+    Long cashAccountId,
+    /** 所属现金账户开票属性。 */
+    String invoiceMode){}
  /** 独立于来源单据的调整关系。 @author Punjab */
  public record Adjustment(
     /** 负数调整归属的原业务组ID */

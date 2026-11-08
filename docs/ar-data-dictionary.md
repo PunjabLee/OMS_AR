@@ -1,6 +1,6 @@
 # OMS 应收系统数据字典
 
-适用版本为 MySQL 8.0.42，范围为正式迁移 V001–V012 的 21 张业务表，共 311 个列定义。下方可按中文名称跳转到对应物理表。
+适用版本为 MySQL 8.0.42，范围为正式迁移 V001–V019 的 29 张业务表，共 418 个列定义。下方可按中文名称跳转到对应物理表。
 
 ## 读表约定
 
@@ -35,6 +35,14 @@
 | [来源取消保护](#oms_ar_source_guard) | `oms_ar_source_guard` | V010 |
 | [财务通知队列](#oms_ar_outbox) | `oms_ar_outbox` | V011 |
 | [通知人工重试审计](#oms_ar_outbox_retry) | `oms_ar_outbox_retry` | V012 |
+| [客户现金账户](#oms_ar_cash_account) | `oms_ar_cash_account` | V013 |
+| [业务组现金账户归属](#oms_ar_cash_group_binding) | `oms_ar_cash_group_binding` | V014 |
+| [现金充值批次](#oms_ar_cash_receipt_lot) | `oms_ar_cash_receipt_lot` | V015 |
+| [现金冻结单](#oms_ar_cash_hold) | `oms_ar_cash_hold` | V016 |
+| [冻结单批次分摊](#oms_ar_cash_hold_slice) | `oms_ar_cash_hold_slice` | V016 |
+| [受托收款档案](#oms_ar_payout_account) | `oms_ar_payout_account` | V017 |
+| [提现申请及线下付款](#oms_ar_withdrawal) | `oms_ar_withdrawal` | V017 |
+| [充值整批冲正](#oms_ar_cash_receipt_reversal) | `oms_ar_cash_receipt_reversal` | V019 |
 
 <a id="oms_ar_document"></a>
 
@@ -431,14 +439,19 @@
 | `updated_time` | 记录最后更新时间 | `DATETIME(6)` | 否 | — | — |
 | `updated_by` | 最近更新记录的操作人 | `VARCHAR(100)` | 否 | — | — |
 | `delete_status` | 记录的逻辑删除标志 | `BOOLEAN` | 否 | `FALSE` | — |
+| `cash_account_id` | 信用余额所属现金账户 ID。历史未分户记录可为空 | `BIGINT` | 是 | — | — |
+| `cash_scope_key` | 分户唯一键。未指定现金账户时取 0 | `BIGINT` | 是 | — | `GENERATED ALWAYS AS (IFNULL(cash_account_id,0)) STORED` |
 
 **索引与约束**
 
 - `PRIMARY KEY(id)`
-- `UNIQUE KEY uk_account_scope(customer_id,legal_entity_id,currency)`
+- `UNIQUE KEY uk_credit_cash_scope(customer_id,legal_entity_id,currency,cash_scope_key)`
 - `UNIQUE KEY uk_account_id_scope(id,customer_id,legal_entity_id,currency)`
 - `CONSTRAINT ck_account_balance CHECK(balance_amount>=0)`
 - `CONSTRAINT ck_account_version CHECK(version>=0)`
+- `CONSTRAINT fk_credit_cash_scope FOREIGN KEY(cash_account_id,customer_id,legal_entity_id,currency) REFERENCES oms_ar_cash_account(id,customer_id,legal_entity_id,currency)`
+
+[V018 分户迁移](../oms-ar-server/src/main/resources/db/migration/V018__ar_credit_cash_scope.sql) 以含 cash_scope_key 的唯一索引替换 uk_account_scope，使同一客户、主体、币种的信用账户可按现金账户区分。
 
 <a id="oms_ar_balance_lot"></a>
 
@@ -757,3 +770,258 @@
 - `CONSTRAINT ck_outbox_retry_scope CHECK(legal_entity_id>0 AND CHAR_LENGTH(TRIM(reason))>0)`
 - `CONSTRAINT ck_outbox_retry_state CHECK(before_status IN ('RETRY','DEAD') AND after_status='PENDING' AND before_attempt_count>=0 AND after_attempt_count=0)`
 - `CONSTRAINT ck_outbox_retry_version CHECK(before_version>=0 AND after_version=before_version+1)`
+
+<a id="oms_ar_cash_account"></a>
+
+## 客户现金账户 · `oms_ar_cash_account`
+
+迁移来源 [V013__ar_cash_account.sql](../oms-ar-server/src/main/resources/db/migration/V013__ar_cash_account.sql)。
+
+| 字段 | 中文含义 | MySQL 类型 | 允许 NULL | 显式默认值 | 附加定义 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | 本表自增主键 | `BIGINT` | 否 | — | `AUTO_INCREMENT PRIMARY KEY` |
+| `customer_id` | 账户所属客户 ID | `BIGINT` | 否 | — | — |
+| `legal_entity_id` | 核算主体ID，也是权限范围 | `BIGINT` | 否 | — | — |
+| `currency` | 结算币种代码 | `CHAR(3)` | 否 | — | — |
+| `invoice_mode` | 开票归属，INVOICE 为开票账户，NO_INVOICE 为不开票账户 | `VARCHAR(16)` | 否 | — | — |
+| `status` | 业务状态（取值见下方约束） | `VARCHAR(16)` | 否 | `'ACTIVE'` | — |
+| `book_amount` | 现金账面余额，包含已冻结部分 | `DECIMAL(24,8)` | 否 | `0` | — |
+| `frozen_amount` | 尚未解冻或支付的冻结金额 | `DECIMAL(24,8)` | 否 | `0` | — |
+| `available_amount` | 可用现金余额，账面余额减冻结额 | `DECIMAL(24,8)` | 是 | — | `GENERATED ALWAYS AS (book_amount-frozen_amount) STORED` |
+| `version` | 用于并发校验的记录版本 | `BIGINT` | 否 | `0` | — |
+| `created_time` | 记录创建时间 | `DATETIME(6)` | 否 | `CURRENT_TIMESTAMP(6)` | — |
+| `created_by` | 创建记录的操作人 | `VARCHAR(100)` | 否 | — | — |
+| `updated_time` | 记录最后更新时间 | `DATETIME(6)` | 否 | `CURRENT_TIMESTAMP(6)` | — |
+| `updated_by` | 最近更新记录的操作人 | `VARCHAR(100)` | 否 | — | — |
+| `delete_status` | 记录的逻辑删除标志 | `BOOLEAN` | 否 | `FALSE` | — |
+
+**索引与约束**
+
+- `PRIMARY KEY(id)`
+- `UNIQUE KEY uk_cash_mode(customer_id,legal_entity_id,currency,invoice_mode)`
+- `UNIQUE KEY uk_cash_scope(id,customer_id,legal_entity_id,currency)`
+- `CONSTRAINT ck_cash_mode CHECK(invoice_mode IN ('INVOICE','NO_INVOICE'))`
+- `CONSTRAINT ck_cash_status CHECK(status IN ('ACTIVE','STOPPED','CLOSED'))`
+- `CONSTRAINT ck_cash_scope CHECK(customer_id>0 AND legal_entity_id>0 AND version>=0)`
+- `CONSTRAINT ck_cash_funds CHECK(book_amount>=frozen_amount AND frozen_amount>=0)`
+- `CONSTRAINT ck_cash_closed CHECK(status<>'CLOSED' OR book_amount=0)`
+
+<a id="oms_ar_cash_group_binding"></a>
+
+## 业务组现金账户归属 · `oms_ar_cash_group_binding`
+
+迁移来源 [V014__ar_cash_group_binding.sql](../oms-ar-server/src/main/resources/db/migration/V014__ar_cash_group_binding.sql)。
+
+| 字段 | 中文含义 | MySQL 类型 | 允许 NULL | 显式默认值 | 附加定义 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | 本表自增主键 | `BIGINT` | 否 | — | `AUTO_INCREMENT PRIMARY KEY` |
+| `group_id` | 应收业务组 ID | `BIGINT` | 否 | — | — |
+| `cash_account_id` | 归属现金账户 ID | `BIGINT` | 否 | — | — |
+| `customer_id` | 账户所属客户 ID | `BIGINT` | 否 | — | — |
+| `legal_entity_id` | 核算主体ID，也是权限范围 | `BIGINT` | 否 | — | — |
+| `currency` | 结算币种代码 | `CHAR(3)` | 否 | — | — |
+| `created_time` | 记录创建时间 | `DATETIME(6)` | 否 | — | — |
+| `created_by` | 创建记录的操作人 | `VARCHAR(100)` | 否 | — | — |
+| `updated_time` | 记录最后更新时间 | `DATETIME(6)` | 否 | — | — |
+| `updated_by` | 最近更新记录的操作人 | `VARCHAR(100)` | 否 | — | — |
+| `delete_status` | 记录的逻辑删除标志 | `BOOLEAN` | 否 | `FALSE` | — |
+
+**索引与约束**
+
+- `PRIMARY KEY(id)`
+- `UNIQUE KEY uk_cash_binding_group(group_id)`
+- `KEY ix_cash_binding_account(cash_account_id,group_id)`
+- `CONSTRAINT fk_cash_binding_group FOREIGN KEY(group_id,customer_id,legal_entity_id,currency) REFERENCES oms_ar_business_group(id,customer_id,legal_entity_id,currency)`
+- `CONSTRAINT fk_cash_binding_account FOREIGN KEY(cash_account_id,customer_id,legal_entity_id,currency) REFERENCES oms_ar_cash_account(id,customer_id,legal_entity_id,currency)`
+
+<a id="oms_ar_cash_receipt_lot"></a>
+
+## 现金充值批次 · `oms_ar_cash_receipt_lot`
+
+迁移来源 [V015__ar_cash_receipt_lot.sql](../oms-ar-server/src/main/resources/db/migration/V015__ar_cash_receipt_lot.sql)。
+
+| 字段 | 中文含义 | MySQL 类型 | 允许 NULL | 显式默认值 | 附加定义 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | 本表自增主键 | `BIGINT` | 否 | — | `AUTO_INCREMENT PRIMARY KEY` |
+| `receipt_id` | 原实际收款记录 ID | `BIGINT` | 否 | — | — |
+| `cash_account_id` | 归属现金账户 ID | `BIGINT` | 否 | — | — |
+| `customer_id` | 账户所属客户 ID | `BIGINT` | 否 | — | — |
+| `legal_entity_id` | 核算主体ID，也是权限范围 | `BIGINT` | 否 | — | — |
+| `currency` | 结算币种代码 | `CHAR(3)` | 否 | — | — |
+| `frozen_amount` | 尚未解冻或支付的冻结金额 | `DECIMAL(24,8)` | 否 | `0` | — |
+| `withdrawn_amount` | 该充值批次累计已完成提现金额 | `DECIMAL(24,8)` | 否 | `0` | — |
+| `created_time` | 记录创建时间 | `DATETIME(6)` | 否 | — | — |
+| `created_by` | 创建记录的操作人 | `VARCHAR(100)` | 否 | — | — |
+| `updated_time` | 记录最后更新时间 | `DATETIME(6)` | 否 | — | — |
+| `updated_by` | 最近更新记录的操作人 | `VARCHAR(100)` | 否 | — | — |
+| `delete_status` | 记录的逻辑删除标志 | `BOOLEAN` | 否 | `FALSE` | — |
+
+**索引与约束**
+
+- `PRIMARY KEY(id)`
+- `UNIQUE KEY uk_cash_lot_receipt(receipt_id)`
+- `KEY ix_cash_lot_fifo(cash_account_id,id)`
+- `CONSTRAINT fk_cash_lot_receipt FOREIGN KEY(receipt_id,customer_id,legal_entity_id,currency) REFERENCES oms_ar_receipt(id,customer_id,legal_entity_id,currency)`
+- `CONSTRAINT fk_cash_lot_account FOREIGN KEY(cash_account_id,customer_id,legal_entity_id,currency) REFERENCES oms_ar_cash_account(id,customer_id,legal_entity_id,currency)`
+- `CONSTRAINT ck_cash_lot_amounts CHECK(frozen_amount>=0 AND withdrawn_amount>=0)`
+
+<a id="oms_ar_cash_hold"></a>
+
+## 现金冻结单 · `oms_ar_cash_hold`
+
+迁移来源 [V016__ar_cash_hold.sql](../oms-ar-server/src/main/resources/db/migration/V016__ar_cash_hold.sql)。
+
+| 字段 | 中文含义 | MySQL 类型 | 允许 NULL | 显式默认值 | 附加定义 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | 本表自增主键 | `BIGINT` | 否 | — | `AUTO_INCREMENT PRIMARY KEY` |
+| `cash_account_id` | 归属现金账户 ID | `BIGINT` | 否 | — | — |
+| `purpose` | 冻结用途，MANUAL 为手工冻结，WITHDRAWAL 为提现冻结 | `VARCHAR(16)` | 否 | — | — |
+| `amount` | 冻结单初始金额 | `DECIMAL(24,8)` | 否 | — | — |
+| `released_amount` | 累计已解冻金额 | `DECIMAL(24,8)` | 否 | `0` | — |
+| `captured_amount` | 累计已扣划金额 | `DECIMAL(24,8)` | 否 | `0` | — |
+| `version` | 用于并发校验的记录版本 | `BIGINT` | 否 | `0` | — |
+| `created_time` | 记录创建时间 | `DATETIME(6)` | 否 | — | — |
+| `created_by` | 创建记录的操作人 | `VARCHAR(100)` | 否 | — | — |
+| `updated_time` | 记录最后更新时间 | `DATETIME(6)` | 否 | — | — |
+| `updated_by` | 最近更新记录的操作人 | `VARCHAR(100)` | 否 | — | — |
+| `delete_status` | 记录的逻辑删除标志 | `BOOLEAN` | 否 | `FALSE` | — |
+
+**索引与约束**
+
+- `PRIMARY KEY(id)`
+- `UNIQUE KEY uk_hold_account(id,cash_account_id)`
+- `FOREIGN KEY(cash_account_id) REFERENCES oms_ar_cash_account(id)`
+- `CHECK(purpose IN ('MANUAL','WITHDRAWAL') AND (purpose='WITHDRAWAL' OR captured_amount=0))`
+- `CHECK(amount>0 AND released_amount>=0 AND captured_amount>=0 AND released_amount+captured_amount<=amount)`
+
+<a id="oms_ar_cash_hold_slice"></a>
+
+## 冻结单批次分摊 · `oms_ar_cash_hold_slice`
+
+迁移来源 [V016__ar_cash_hold.sql](../oms-ar-server/src/main/resources/db/migration/V016__ar_cash_hold.sql)。
+
+| 字段 | 中文含义 | MySQL 类型 | 允许 NULL | 显式默认值 | 附加定义 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | 本表自增主键 | `BIGINT` | 否 | — | `AUTO_INCREMENT PRIMARY KEY` |
+| `hold_id` | 资金冻结单 ID | `BIGINT` | 否 | — | — |
+| `cash_account_id` | 归属现金账户 ID | `BIGINT` | 否 | — | — |
+| `lot_id` | 原充值批次 ID | `BIGINT` | 否 | — | — |
+| `amount` | 该冻结单占用本批次的初始金额 | `DECIMAL(24,8)` | 否 | — | — |
+| `released_amount` | 累计已解冻金额 | `DECIMAL(24,8)` | 否 | `0` | — |
+| `captured_amount` | 累计已扣划金额 | `DECIMAL(24,8)` | 否 | `0` | — |
+| `created_time` | 记录创建时间 | `DATETIME(6)` | 否 | — | — |
+| `created_by` | 创建记录的操作人 | `VARCHAR(100)` | 否 | — | — |
+| `updated_time` | 记录最后更新时间 | `DATETIME(6)` | 否 | — | — |
+| `updated_by` | 最近更新记录的操作人 | `VARCHAR(100)` | 否 | — | — |
+| `delete_status` | 记录的逻辑删除标志 | `BOOLEAN` | 否 | `FALSE` | — |
+
+**索引与约束**
+
+- `PRIMARY KEY(id)`
+- `UNIQUE KEY uk_hold_lot(hold_id,lot_id)`
+- `FOREIGN KEY(hold_id,cash_account_id) REFERENCES oms_ar_cash_hold(id,cash_account_id)`
+- `FOREIGN KEY(lot_id) REFERENCES oms_ar_cash_receipt_lot(id)`
+- `CHECK(amount>0 AND released_amount>=0 AND captured_amount>=0 AND released_amount+captured_amount<=amount)`
+
+<a id="oms_ar_payout_account"></a>
+
+## 受托收款档案 · `oms_ar_payout_account`
+
+迁移来源 [V017__ar_withdrawal.sql](../oms-ar-server/src/main/resources/db/migration/V017__ar_withdrawal.sql)。
+
+| 字段 | 中文含义 | MySQL 类型 | 允许 NULL | 显式默认值 | 附加定义 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | 本表自增主键 | `BIGINT` | 否 | — | `AUTO_INCREMENT PRIMARY KEY` |
+| `legal_entity_id` | 核算主体ID，也是权限范围 | `BIGINT` | 否 | — | — |
+| `customer_id` | 账户所属客户 ID | `BIGINT` | 否 | — | — |
+| `currency` | 结算币种代码 | `CHAR(3)` | 否 | — | — |
+| `beneficiary_ref` | 受托收款档案的外部引用号 | `VARCHAR(100)` | 否 | — | — |
+| `account_last_four` | 收款账号末四位 | `CHAR(4)` | 否 | — | — |
+| `status` | 业务状态（取值见下方约束） | `VARCHAR(16)` | 否 | `'ACTIVE'` | — |
+| `version` | 用于并发校验的记录版本 | `BIGINT` | 否 | `0` | — |
+| `created_by` | 创建记录的操作人 | `VARCHAR(100)` | 否 | — | — |
+| `updated_by` | 最近更新记录的操作人 | `VARCHAR(100)` | 否 | — | — |
+| `created_time` | 记录创建时间 | `DATETIME(6)` | 否 | `CURRENT_TIMESTAMP(6)` | — |
+| `updated_time` | 记录最后更新时间 | `DATETIME(6)` | 否 | `CURRENT_TIMESTAMP(6)` | — |
+| `delete_status` | 记录的逻辑删除标志 | `BOOLEAN` | 否 | `FALSE` | — |
+
+**索引与约束**
+
+- `PRIMARY KEY(id)`
+- `UNIQUE KEY uk_payout_ref(legal_entity_id,beneficiary_ref)`
+- `UNIQUE KEY uk_payout_scope(id,customer_id,legal_entity_id,currency)`
+- `CONSTRAINT ck_payout_status CHECK(status IN ('ACTIVE','DISABLED'))`
+- `CONSTRAINT ck_payout_suffix CHECK(account_last_four REGEXP '^[0-9]{4}$')`
+
+<a id="oms_ar_withdrawal"></a>
+
+## 提现申请及线下付款 · `oms_ar_withdrawal`
+
+迁移来源 [V017__ar_withdrawal.sql](../oms-ar-server/src/main/resources/db/migration/V017__ar_withdrawal.sql)。
+
+| 字段 | 中文含义 | MySQL 类型 | 允许 NULL | 显式默认值 | 附加定义 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | 本表自增主键 | `BIGINT` | 否 | — | `AUTO_INCREMENT PRIMARY KEY` |
+| `customer_id` | 账户所属客户 ID | `BIGINT` | 否 | — | — |
+| `legal_entity_id` | 核算主体ID，也是权限范围 | `BIGINT` | 否 | — | — |
+| `currency` | 结算币种代码 | `CHAR(3)` | 否 | — | — |
+| `cash_account_id` | 归属现金账户 ID | `BIGINT` | 否 | — | — |
+| `payout_account_id` | 提现选用的受托收款档案 ID | `BIGINT` | 否 | — | — |
+| `hold_id` | 资金冻结单 ID | `BIGINT` | 否 | — | — |
+| `amount` | 申请提现金额 | `DECIMAL(24,8)` | 否 | — | — |
+| `status` | 业务状态（取值见下方约束） | `VARCHAR(20)` | 否 | `'PENDING'` | — |
+| `reviewer` | 批准或拒绝申请的审核人 | `VARCHAR(100)` | 是 | — | — |
+| `claimed_by` | 认领线下付款的操作人 | `VARCHAR(100)` | 是 | — | — |
+| `bank_receipt` | 银行付款成功回单号，同一主体唯一 | `VARCHAR(128)` | 是 | — | — |
+| `evidence` | 付款结果凭证引用 | `VARCHAR(256)` | 是 | — | — |
+| `version` | 用于并发校验的记录版本 | `BIGINT` | 否 | `0` | — |
+| `created_by` | 创建记录的操作人 | `VARCHAR(100)` | 否 | — | — |
+| `updated_by` | 最近更新记录的操作人 | `VARCHAR(100)` | 否 | — | — |
+| `created_time` | 记录创建时间 | `DATETIME(6)` | 否 | `CURRENT_TIMESTAMP(6)` | — |
+| `updated_time` | 记录最后更新时间 | `DATETIME(6)` | 否 | `CURRENT_TIMESTAMP(6)` | — |
+| `delete_status` | 记录的逻辑删除标志 | `BOOLEAN` | 否 | `FALSE` | — |
+
+**索引与约束**
+
+- `PRIMARY KEY(id)`
+- `UNIQUE KEY uk_withdrawal_hold(hold_id)`
+- `UNIQUE KEY uk_withdrawal_bank_receipt(legal_entity_id,bank_receipt)`
+- `CONSTRAINT fk_withdrawal_cash FOREIGN KEY(cash_account_id,customer_id,legal_entity_id,currency) REFERENCES oms_ar_cash_account(id,customer_id,legal_entity_id,currency)`
+- `CONSTRAINT fk_withdrawal_payout FOREIGN KEY(payout_account_id,customer_id,legal_entity_id,currency) REFERENCES oms_ar_payout_account(id,customer_id,legal_entity_id,currency)`
+- `CONSTRAINT fk_withdrawal_hold FOREIGN KEY(hold_id,cash_account_id) REFERENCES oms_ar_cash_hold(id,cash_account_id)`
+- `CONSTRAINT ck_withdrawal_amount CHECK(amount>0)`
+- `CONSTRAINT ck_withdrawal_status CHECK(status IN ('PENDING','APPROVED','REJECTED','CANCELLED','PROCESSING','UNKNOWN','PAID','FAILED'))`
+- `CONSTRAINT ck_withdrawal_receipt CHECK((status='PAID' AND bank_receipt IS NOT NULL) OR (status<>'PAID' AND bank_receipt IS NULL))`
+- `CONSTRAINT ck_withdrawal_evidence CHECK(status<>'FAILED' OR evidence IS NOT NULL)`
+
+<a id="oms_ar_cash_receipt_reversal"></a>
+
+## 充值整批冲正 · `oms_ar_cash_receipt_reversal`
+
+迁移来源 [V019__ar_cash_receipt_reversal.sql](../oms-ar-server/src/main/resources/db/migration/V019__ar_cash_receipt_reversal.sql)。
+
+| 字段 | 中文含义 | MySQL 类型 | 允许 NULL | 显式默认值 | 附加定义 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | 本表自增主键 | `BIGINT` | 否 | — | `AUTO_INCREMENT PRIMARY KEY` |
+| `lot_id` | 原充值批次 ID | `BIGINT` | 否 | — | — |
+| `operation_id` | 幂等操作记录ID | `BIGINT` | 否 | — | — |
+| `amount` | 整批冲正的充值金额 | `DECIMAL(24,8)` | 否 | — | — |
+| `reason` | 业务操作原因 | `VARCHAR(500)` | 否 | — | — |
+| `created_time` | 记录创建时间 | `DATETIME(6)` | 否 | — | — |
+| `created_by` | 创建记录的操作人 | `VARCHAR(100)` | 否 | — | — |
+| `updated_time` | 记录最后更新时间 | `DATETIME(6)` | 否 | — | — |
+| `updated_by` | 最近更新记录的操作人 | `VARCHAR(100)` | 否 | — | — |
+| `delete_status` | 记录的逻辑删除标志 | `BOOLEAN` | 否 | `FALSE` | — |
+
+**索引与约束**
+
+- `PRIMARY KEY(id)`
+- `UNIQUE KEY uk_cash_reversed_lot(lot_id)`
+- `UNIQUE KEY uk_cash_reversal_operation(operation_id)`
+- `CONSTRAINT fk_cash_reversal_lot FOREIGN KEY(lot_id) REFERENCES oms_ar_cash_receipt_lot(id)`
+- `CONSTRAINT fk_cash_reversal_operation FOREIGN KEY(operation_id) REFERENCES oms_ar_operation_request(id)`
+- `CONSTRAINT ck_cash_reversal_amount CHECK(amount>0)`
+
+## V020 切换表
+
+此版本预留给历史资金切换。表名、字段及约束待正式迁移落盘后登记。

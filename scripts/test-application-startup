@@ -82,6 +82,9 @@ def main():
                 actual, payload = response.status, json.load(response)
         except HTTPError as error:
             actual, payload = error.code, json.load(error)
+        if isinstance(status, tuple):
+            assert actual in status, f'Unexpected HTTP status {actual} for {path}'
+            return actual, payload.get('data')
         assert actual == status, f'Unexpected HTTP status {actual} for {path}'
         if status == 200:
             assert payload['code'] == 0, f'Business operation failed for {path}'
@@ -95,8 +98,8 @@ def main():
         admin(f"GRANT ALL PRIVILEGES ON `{database}`.* TO 'oms_ar'@'%';")
         process, log = start('cold')
         port = ready(process, log)
-        assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '19'
-        report['checks'].append('cold startup: automatic 19-version migration and schema validation')
+        assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '20'
+        report['checks'].append('cold startup: automatic 20-version migration and schema validation')
         api(port, 'receivables/detail?id=1&legalEntityId=1', status=401, authenticated=False)
         opening = dict(requestKey=key(), customerId=7, legalEntityId=1, currency='CNY', invoiceMode='INVOICE', reason='开户验收')
         aa = api(port, 'cash-accounts/open', opening)
@@ -243,6 +246,9 @@ def main():
         api(port,'receipts/create',dict(deposit,customerId=8,cashAccountId=closing,requestKey=key(),sourceId=key()),status=409)
         assert lifecycle('reopen',closing) == closing
         assert api(port,'cash-accounts/detail?id='+str(closing)+'&legalEntityId=1')['status'] == 'ACTIVE'
+        from startup_cash_races import check as check_races
+        check_races(api,port,key,closing,today)
+        report['checks'].append('concurrent receipt/account settlement and competing freeze: exactly one debit')
         report['checks'].append('withdrawal: independent review, offline payment, unknown result, capture and release')
         report['checks'].append('cash stop/resume: both debit paths blocked, deposits accepted and replay safe')
         report['checks'].append('shared receipt lots: direct limit, FIFO split, stale requests and original receipt reversal')
@@ -296,7 +302,7 @@ def main():
         process, log = start('restart')
         port = ready(process, log)
         assert api(port, f'receivables/detail?id={document}&legalEntityId=1')['document']['status'] == 'VOID'
-        assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '19'
+        assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '20'
         report['checks'].append('restart preserves business data and migration history')
         stop(process)
         sql('ALTER TABLE oms_ar_document MODIFY doc_no VARCHAR(65) NOT NULL;')

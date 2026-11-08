@@ -193,3 +193,7 @@ POST /api/finance/notifications/retry，需主体授权及ar:outbox:retry。请�
 同主体/操作人/requestKey的完全相同请求返回同一审计ID；即使通知随后已再次领取或发送，也不重复重置状态。相同键但参数不同拒绝。状态修改、独立审计和幂等结果在同一事务提交，审计失败时全部回滚。
 
 POST /api/finance/notifications/retries/page，需ar:outbox:read。请求包含legalEntityId、outboxId及page/size（默认1/20，最大200）。按ID倒序查询该通知的重试记录，返回原因、操作人/时间、重试前状态/尝试数/下次尝试时间/错误/版本，以及重试后PENDING/0/下次尝试时间/版本。不返回租约令牌或payload。attemptCount是当前轮计数，历史轮计数保存在各次审计中；没有修改或删除审计的业务接口。
+
+## 现金账户与线下提现
+
+开户、按客户列出账户、余额、收款充值与冲正、双入口核销、冻结与解冻、止付、销户恢复、提现审批与结果、分页流水和专项对账见[现金账户操作与接口](cash-accounts.md)。历史分户通过[切换命令](cash-cutover.md)执行。

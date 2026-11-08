@@ -1,4 +1,4 @@
-# 最终独立评审与交付结论
+# V012 核心应收独立评审与交付结论
 
 日期：2026-11-03。独立只读评审代理final_branch_review；审查实现基线2ed3dd8，之后截至4907878仅改动文档，执行方已用git diff核实。评审恢复后补齐早先中断的检查，最终完整报告替代此前部分结论。
 
@@ -36,3 +36,5 @@
 执行方verify-local：Python5、Java默认37、业务实库201、迁移/结构12项和打包应用5组全部通过。业务实库默认门禁跳过，不冒充默认单元测试。日志work/final-acceptance-verification.log和work/startup-smoke-result.json保留在忽略目录；最终需求逐项对应见acceptance-matrix.md。验收专属临时库和进程已清理，无外部通知发送。
 
 全部实现及文档保留在用户指定项目目录。Git每项细分任务独立提交；用户.DS_Store未改动。没有远程推送、合并、标签或生产发布动作。
+
+V020 客户现金分户扩展的验收记录及覆盖范围见[需求验收矩阵](acceptance-matrix.md)。

@@ -22,6 +22,10 @@
 | ar:outbox:read | 通知分页/详情/人工重试历史 |
 | ar:outbox:retry | 失败通知人工重试 |
 
+现金账户查询、批次、流水和专项对账要求 `ar:cash:read`。开户、冻结、解冻、止付、恢复支付、销户及重新启用分别使用 `ar:cash:open/freeze/unfreeze/stop/resume/close/reopen`（斜杠后每一项均为独立的权限后缀）。充值沿用收款登记权限，整批冲正要求 `ar:cash:deposit:reverse`。账户核销沿用 `ar:settle`。
+
+受托收款档案由 `ar:payout:manage` 维护。提现申请与撤销、复核、认领与结果登记、详情查询分别要求 `ar:withdraw:apply`、`ar:withdraw:review`、`ar:withdraw:pay`、`ar:withdraw:read`。复核人须与申请人不同。
+
 每项仍需legalEntityId在服务端授权主体集合内。普通ar:read不授予通知原文读取，ar:create不自动授予收款登记或作废。默认只有ar:create、ar:read；测试或联调需要的权限应由环境配置明确增加。
 
 ## 2. 完整业务路由索引
@@ -63,10 +67,37 @@
 | 通知 | GET /notifications/detail | 元数据与不可变payload，不含租约令牌 |
 | 通知 | POST /notifications/retry | 人工重试审计ID |
 | 通知 | POST /notifications/retries/page | 指定通知的重试审计历史 |
+| 现金账户 | GET /cash-accounts/by-customer | 按客户列出账户及各自余额 |
+| 现金账户 | POST /cash-accounts/close | 销户 |
+| 现金账户 | GET /cash-accounts/detail | 按主体查询详情 |
+| 现金账户 | POST /cash-accounts/freeze | 冻结并返回冻结单 ID |
+| 现金账户 | GET /cash-accounts/holds/detail | 冻结单及批次分摊 |
+| 现金账户 | POST /cash-accounts/ledger/page | 账户变动和前后余额 |
+| 现金账户 | POST /cash-accounts/lots/page | 充值批次及可用额 |
+| 现金账户 | POST /cash-accounts/open | 按开票属性开户 |
+| 现金账户 | POST /cash-accounts/reconciliation/page | 按客户范围查询现金对账差异 |
+| 现金账户 | POST /cash-accounts/reopen | 恢复原账户 |
+| 现金账户 | POST /cash-accounts/resume | 解除止付 |
+| 现金账户 | POST /cash-accounts/settlements/confirm | 返回事件及按出资收款生成的核销单 ID 列表 |
+| 现金账户 | POST /cash-accounts/settlements/preview | 预览逐批出资和应收分配 |
+| 现金账户 | POST /cash-accounts/stop | 整户止付 |
+| 现金账户 | POST /cash-accounts/unfreeze | 按原批次部分或全部解冻 |
+| 收款 | POST /receipts/reverse-deposit | 整批冲回未使用充值 |
+| 提现 | POST /withdrawals/apply | 申请并冻结提现金额 |
+| 提现 | POST /withdrawals/approve | 独立复核通过 |
+| 提现 | POST /withdrawals/cancel | 认领前撤销 |
+| 提现 | POST /withdrawals/claim | 认领线下付款 |
+| 提现 | GET /withdrawals/detail | 按主体查询详情 |
+| 提现 | POST /withdrawals/payout-accounts/bind | 登记受托收款档案 |
+| 提现 | POST /withdrawals/payout-accounts/disable | 停用受托收款档案 |
+| 提现 | POST /withdrawals/reject | 拒绝并释放冻结 |
+| 提现 | POST /withdrawals/result | 登记付款结果和凭证 |
 
-通用GET详情至少需要`id`和`legalEntityId`。应收生命周期使用documentId；通知重试历史必须传outboxId。没有通用“修改余额”“删除流水”或“恢复作废”接口。
+按 ID 查询的通用 GET 详情至少需要`id`和`legalEntityId`。应收生命周期使用documentId；通知重试历史必须传outboxId。没有通用“修改余额”“删除流水”或“恢复作废”接口。
 
 ## 3. 可照着执行的调用编排
+
+以下创建与收款示例适用于未启用现金分户的范围。已分户时，新业务组需指定 invoiceMode，充值需指定 cashAccountId，见[现金账户操作示例](../cash-accounts.md)。
 
 以下JSON为合法格式的说明样例，不自动执行。示例ID仅为占位数值，必须替换为当前调用返回的ID；fingerprint必须复制实际预览响应，不可使用示例文字。每个新业务动作生成新requestKey，网络重试保留原键及原内容。
 

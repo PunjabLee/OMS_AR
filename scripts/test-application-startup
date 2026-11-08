@@ -300,6 +300,9 @@ def main():
         assert api(port, 'notifications/retry', retry_request) == audit
         assert api(port, 'notifications/retries/page', dict(legalEntityId=1, outboxId=notification))['total'] == 1
         report['checks'].append('notifications disabled: persisted ready queue, manual retry and immutable retry history')
+        from startup_cash_cutover import verify as verify_cutover
+        verify_cutover(ROOT, env, api, port, sql, key)
+        report['checks'].append('packaged historical cutover: rejection, preview, apply, replay, ledger and mandatory ownership')
         stop(process)
         process, log = start('restart')
         port = ready(process, log)

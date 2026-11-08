@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;import org.springframework.transac
 @Service @RequiredArgsConstructor
 public class CustomerBalanceServiceImpl implements CustomerBalanceService {
  private final com.punjab.oms.ar.domain.convert.finance.CustomerBalanceConverter converter;
+ private final CashGroupOwnership ownership;
  private final CustomerBalanceDao dao;private final ReceivableDao receivables;private final FinanceJournalService journal;private final FinanceValues values;private final Validator validator;
  /** 按授权主体读取信用账户，将当前余额及版本转换为查询响应。 */
  public com.punjab.oms.ar.domain.vo.finance.CustomerAccountResponse detail(com.punjab.oms.ar.domain.query.finance.BalanceDetailQuery query){validate(query);CurrentUser.require(query.legalEntityId(),"ar:read");var account=dao.detail(converter.toDetailQueryBO(query));if(account==null)throw new ServiceException("客户账户不存在或不可访问");return converter.toResponse(account);}
@@ -17,6 +18,8 @@ public class CustomerBalanceServiceImpl implements CustomerBalanceService {
   if(ticket.resultReference()!=null)return ticket.resultReference();
   var line=receivables.line(request.negativeLineId(),false);checkLine(line,request.legalEntityId());values.positiveMoney(line.getCurrency(),request.amount());
   var seed=values.initialize(new ArCustomerAccount(),ticket.actor());seed.setCustomerId(line.getCustomerId());seed.setLegalEntityId(line.getLegalEntityId());seed.setCurrency(line.getCurrency());
+  var origins=ownership.groupAccounts(line.getLegalEntityId(),line.getCustomerId(),line.getCurrency(),List.of(line.getGroupId()));
+  if (!origins.isEmpty()) seed.setCashAccountId(origins.get(line.getGroupId()).getId());
   var account=dao.reserve(seed);if(account==null)throw new ServiceException("客户账户不可用");
   receivables.group(line.getGroupId());line=receivables.line(line.getId(),true);checkLine(line,request.legalEntityId());
   if(!line.getVersion().equals(request.expectedLineVersion()) || line.getOpenAmount().negate().compareTo(request.amount())<0)throw new ServiceException("应收版本已变化或可转入余额不足");

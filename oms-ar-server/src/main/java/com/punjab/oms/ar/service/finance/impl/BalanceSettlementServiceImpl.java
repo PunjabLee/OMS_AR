@@ -5,6 +5,7 @@ import java.math.BigDecimal;import java.time.LocalDateTime;import java.nio.chars
 /** 账户及来源批次先锁定，再锁应收组；按原分配反核销。 @author Punjab */
 @Service @RequiredArgsConstructor
 public class BalanceSettlementServiceImpl implements BalanceSettlementService {
+ private final CashGroupOwnership ownership;
  private final BalanceSettlementDao sources;private final CustomerBalanceDao balances;private final SettlementDao settlements;
  private final AllocationService allocator;private final FinanceJournalService journal;private final FinanceValues values;private final Validator validator;
  /** 当前预览对应的事务内对象。 @author Punjab */
@@ -75,6 +76,10 @@ public class BalanceSettlementServiceImpl implements BalanceSettlementService {
   BigDecimal available=lots.stream().map(l->l.getAmount().subtract(l.getUsedAmount())).reduce(BigDecimal.ZERO,BigDecimal::add);
   if(available.compareTo(account.getBalanceAmount())!=0)throw new ServiceException("账户余额与来源批次不一致，请先对账");
   checkGroups(settlements.groups(request.groupIds(),request.legalEntityId(),lock),request.groupIds(),account);
+  var origins=ownership.groupAccounts(account.getLegalEntityId(),account.getCustomerId(),account.getCurrency(),request.groupIds());
+  if ((origins.isEmpty() && account.getCashAccountId()!=null)
+      || origins.values().stream().anyMatch(origin->!origin.getId().equals(account.getCashAccountId())))
+   throw new ServiceException("信用余额与目标业务组必须归属同一现金账户");
   var lines=settlements.groupLines(request.groupIds(),lock);
   var groups=request.groupIds().stream().map(id->new AllocationPreviewRequest.Group(id,lines.stream().filter(l->id.equals(l.getGroupId())).map(l->new AllocationPreviewRequest.Line(l.getId(),AmountType.valueOf(l.getAmountType()),l.getOpenAmount())).toList())).toList();
   var allocated=allocator.preview(new AllocationPreviewRequest(request.amount(),Currency.getInstance(account.getCurrency()).getDefaultFractionDigits(),request.strategy(),groups));

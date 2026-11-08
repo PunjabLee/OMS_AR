@@ -12,4 +12,6 @@ public record CustomerAccountResponse(
     /** 客户信用账户可用余额 */
     java.math.BigDecimal balanceAmount,
     /** 用于并发校验的记录版本 */
-    Long version){}
+    Long version,
+    /** 归属现金账户，未分户时为空 */
+    Long cashAccountId){}

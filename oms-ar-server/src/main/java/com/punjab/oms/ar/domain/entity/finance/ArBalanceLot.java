@@ -3,6 +3,10 @@ import com.baomidou.mybatisplus.annotation.TableName;import java.math.BigDecimal
 /** 客户信用余额持久化记录。 @author Punjab */
 @TableName("oms_ar_balance_lot")
 public class ArBalanceLot extends ArBaseEntity {
+ @com.baomidou.mybatisplus.annotation.TableField(exist=false)
+ private Long cashAccountId;
+ public Long getCashAccountId(){return cashAccountId;}
+ public void setCashAccountId(Long value){cashAccountId=value;}
  /** 客户信用账户ID */
  private Long accountId;
  public Long getAccountId(){return accountId;} public void setAccountId(Long v){accountId=v;}

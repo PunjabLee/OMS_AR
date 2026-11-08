@@ -22,7 +22,7 @@ class OutboxEnqueueRealTest {
  String actor;long customer;
  @BeforeEach void setup()throws Exception{
   assertThat(jdbc.queryForObject("SELECT DATABASE()",String.class)).isEqualTo("oms_ar_test");
-  try(var files=Files.list(Path.of("../scratch/dbddl"))){for(var file:files.filter(p->p.getFileName().toString().matches("V[0-9]+__.*\\.sql")).sorted().toList())for(String sql:Files.readString(file).split(";"))if(!sql.isBlank())jdbc.execute(sql);}
+  try(var files=Files.list(Path.of("../scratch/dbddl"))){for(var file:files.filter(p->p.getFileName().toString().matches("V[0-9]+__.*\\.sql")).sorted().toList())if(com.punjab.oms.ar.ScratchCreditSchema.shouldApply(jdbc,file))for(String sql:Files.readString(file).split(";"))if(!sql.isBlank())jdbc.execute(sql);}
   actor="outbox-"+UUID.randomUUID();customer=Math.abs(UUID.randomUUID().getMostSignificantBits()>>>1);
   CurrentUser.set(new CurrentUser.Identity(actor,Set.of(1L),Set.of("ar:create","ar:receipt:create")));
  }

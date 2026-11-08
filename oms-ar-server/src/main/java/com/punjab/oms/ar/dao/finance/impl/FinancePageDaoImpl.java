@@ -20,5 +20,12 @@ import com.punjab.oms.ar.dao.finance.FinancePageDao;import com.punjab.oms.ar.bas
  filter.eq(q.getStatus()!=null,ArBalanceLot::getStatus,q.getStatus());
  filter.eq(q.getAccountId()!=null,ArBalanceLot::getAccountId,q.getAccountId());
  filter.eq(q.getSourceLineId()!=null,ArBalanceLot::getSourceLineId,q.getSourceLineId());
- long total=lots.selectCount(filter);filter.orderByDesc(ArBalanceLot::getId).last("LIMIT "+q.getSize()+" OFFSET "+(((long)q.getPage()-1)*q.getSize()));return new PageResult<>(total,q.getPage(),q.getSize(),lots.selectList(filter));}
+ long total=lots.selectCount(filter);filter.orderByDesc(ArBalanceLot::getId).last("LIMIT "+q.getSize()+" OFFSET "+(((long)q.getPage()-1)*q.getSize()));var rows=lots.selectList(filter);
+ if(!rows.isEmpty()){
+  var ids=rows.stream().map(ArBalanceLot::getAccountId).distinct().toList();
+  var owners=new java.util.HashMap<Long,Long>();
+  accounts.selectByIds(ids).forEach(a->owners.put(a.getId(),a.getCashAccountId()));
+  rows.forEach(l->l.setCashAccountId(owners.get(l.getAccountId())));
+ }
+ return new PageResult<>(total,q.getPage(),q.getSize(),rows);}
 }

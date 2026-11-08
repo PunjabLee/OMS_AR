@@ -7,8 +7,10 @@ import org.springframework.stereotype.Repository;import lombok.RequiredArgsConst
 public class CustomerBalanceDaoImpl extends CrudRepository<ArCustomerAccountMapper,ArCustomerAccount> implements CustomerBalanceDao {
  private final ArBalanceLotMapper lots;private final ArLineMapper lines;private final ArEventMapper events;
  public ArCustomerAccount detail(com.punjab.oms.ar.domain.bo.finance.BalanceDetailQueryBO query){return account(query.id(),query.legalEntityId(),false);}
- public ArBalanceLot lotDetail(com.punjab.oms.ar.domain.bo.finance.BalanceDetailQueryBO query){return lot(query.id(),query.legalEntityId(),false);}
- public ArCustomerAccount reserve(ArCustomerAccount v){baseMapper.reserve(v);return baseMapper.selectOne(new LambdaQueryWrapper<ArCustomerAccount>().eq(ArCustomerAccount::getCustomerId,v.getCustomerId()).eq(ArCustomerAccount::getLegalEntityId,v.getLegalEntityId()).eq(ArCustomerAccount::getCurrency,v.getCurrency()).eq(ArCustomerAccount::getDeleteStatus,false).last("FOR UPDATE"));}
+ public ArBalanceLot lotDetail(com.punjab.oms.ar.domain.bo.finance.BalanceDetailQueryBO query){var lot=lot(query.id(),query.legalEntityId(),false);
+  if(lot!=null) lot.setCashAccountId(account(lot.getAccountId(),query.legalEntityId(),false).getCashAccountId());
+  return lot;}
+ public ArCustomerAccount reserve(ArCustomerAccount v){baseMapper.reserve(v);return baseMapper.selectOne(new LambdaQueryWrapper<ArCustomerAccount>().eq(ArCustomerAccount::getCustomerId,v.getCustomerId()).eq(ArCustomerAccount::getLegalEntityId,v.getLegalEntityId()).eq(ArCustomerAccount::getCurrency,v.getCurrency()).eq(v.getCashAccountId()!=null,ArCustomerAccount::getCashAccountId,v.getCashAccountId()).isNull(v.getCashAccountId()==null,ArCustomerAccount::getCashAccountId).eq(ArCustomerAccount::getDeleteStatus,false).last("FOR UPDATE"));}
  public ArCustomerAccount account(Long id,Long entity,boolean lock){var q=new LambdaQueryWrapper<ArCustomerAccount>().eq(ArCustomerAccount::getId,id).eq(ArCustomerAccount::getLegalEntityId,entity).eq(ArCustomerAccount::getDeleteStatus,false);if(lock)q.last("FOR UPDATE");return baseMapper.selectOne(q);}
  public ArBalanceLot lot(Long id,Long entity,boolean lock){var q=new LambdaQueryWrapper<ArBalanceLot>().eq(ArBalanceLot::getId,id).eq(ArBalanceLot::getLegalEntityId,entity).eq(ArBalanceLot::getDeleteStatus,false);if(lock)q.last("FOR UPDATE");return lots.selectOne(q);}
  public boolean createLot(ArBalanceLot v){return lots.insert(v)==1;}

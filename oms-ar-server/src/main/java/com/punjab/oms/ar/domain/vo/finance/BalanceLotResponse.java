@@ -20,4 +20,6 @@ public record BalanceLotResponse(
     /** 当前业务记录的状态 */
     String status,
     /** 用于并发校验的记录版本 */
-    Long version){}
+    Long version,
+    /** 归属现金账户，未分户时为空 */
+    Long cashAccountId){}

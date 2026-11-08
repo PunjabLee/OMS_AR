@@ -9,16 +9,44 @@ import static org.assertj.core.api.Assertions.*;
 @SpringBootTest(classes=ArApplication.class,webEnvironment=SpringBootTest.WebEnvironment.NONE) @ActiveProfiles("pre")
 @EnabledIfSystemProperty(named="ar.balance-settlement.real",matches="true") @EnabledIfSystemProperty(named="ar.balance-settlement.real.commit",matches="true")
 class BalanceSettlementRealTest {
- @DynamicPropertySource static void config(DynamicPropertyRegistry p){p.add("spring.datasource.url",()->"jdbc:mysql://127.0.0.1:13306/oms_ar_test");p.add("spring.datasource.username",()->"oms_ar");p.add("spring.datasource.password",()->System.getenv("AR_TEST_PASSWORD"));}
+ private static final long scopedCustomer=UUID.randomUUID().getMostSignificantBits() & Long.MAX_VALUE;
+ @Autowired CashAccountService cash;
+ @DynamicPropertySource static void config(DynamicPropertyRegistry p){p.add("ar.cash.binding-scopes",()->"1/"+scopedCustomer+"/CNY");p.add("spring.datasource.url",()->"jdbc:mysql://127.0.0.1:13306/oms_ar_test");p.add("spring.datasource.username",()->"oms_ar");p.add("spring.datasource.password",()->System.getenv("AR_TEST_PASSWORD"));}
  @Autowired BalanceSettlementService spending;@Autowired CustomerBalanceService balances;@Autowired ReceivableService receivables;@Autowired SettlementService settlements;@Autowired JdbcTemplate jdbc;
  private long customer; private String key(){return UUID.randomUUID().toString();} private BigDecimal n(String v){return new BigDecimal(v);}
- private void actor(){CurrentUser.set(new CurrentUser.Identity("balance-spend-test",Set.of(1L),Set.of("ar:create","ar:read","ar:settle","ar:reverse","ar:balance:transfer")));}
+ private void actor(){CurrentUser.set(new CurrentUser.Identity("balance-spend-test",Set.of(1L),Set.of("ar:create","ar:read","ar:settle","ar:reverse","ar:balance:transfer","ar:cash:open")));}
  @BeforeEach void setup()throws Exception{assertThat(jdbc.queryForObject("SELECT DATABASE()",String.class)).isEqualTo("oms_ar_test");
-  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql","V011__ar_outbox.sql","V003__ar_receipt.sql","V013__ar_cash_account.sql","V015__ar_cash_receipt_lot.sql","V004__ar_settlement.sql","V005__ar_adjustment_link.sql","V006__ar_customer_balance.sql","V007__ar_balance_settlement.sql","V009__ar_exchange_basis.sql","V010__ar_source_guard.sql")){var file=Path.of("../scratch/dbddl/"+name);if(Files.exists(file))for(String sql:Files.readString(file).split(";"))if(!sql.isBlank())jdbc.execute(sql);}actor();customer=UUID.randomUUID().getMostSignificantBits() & Long.MAX_VALUE;}
+  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql","V011__ar_outbox.sql","V003__ar_receipt.sql","V013__ar_cash_account.sql","V014__ar_cash_group_binding.sql","V015__ar_cash_receipt_lot.sql","V004__ar_settlement.sql","V005__ar_adjustment_link.sql","V006__ar_customer_balance.sql","V018__ar_credit_cash_scope.sql","V007__ar_balance_settlement.sql","V009__ar_exchange_basis.sql","V010__ar_source_guard.sql")){var file=Path.of("../scratch/dbddl/"+name);if(Files.exists(file) && com.punjab.oms.ar.ScratchCreditSchema.shouldApply(jdbc,file))for(String sql:Files.readString(file).split(";"))if(!sql.isBlank())jdbc.execute(sql);}actor();customer=UUID.randomUUID().getMostSignificantBits() & Long.MAX_VALUE;}
  @AfterEach void clear(){CurrentUser.clear();}
  private long line(AmountType type,String amount,Long group,Long original){
   long doc=receivables.create(new ReceivableCreateRequest(key(),customer,1L,"CNY","TAX_ADJUSTMENT",LocalDate.now(),null,"test",List.of(new ReceivableCreateRequest.Line("A",group,type,n(amount),type==AmountType.OUTPUT_TAX?n("0.13"):null,type==AmountType.OUTPUT_TAX?n("100"):null,null,original))));
   return jdbc.queryForObject("SELECT id FROM oms_ar_line WHERE document_id=?",Long.class,doc);
+ }
+ private long scopedLine(String mode,String amount){
+  var input=new ReceivableCreateRequest.Line("A",null,AmountType.PRINCIPAL,n(amount),null,null,null,null,null,mode);
+  long doc=receivables.create(new ReceivableCreateRequest(key(),customer,1L,"CNY","TAX_ADJUSTMENT",LocalDate.now(),null,"test",List.of(input)));
+  return jdbc.queryForObject("SELECT id FROM oms_ar_line WHERE document_id=?",Long.class,doc);
+ }
+ @Test @DisplayName("同客户双户信用余额独立，跨户拒绝且冲正退回原批次") void scopedCredit(){
+  customer=scopedCustomer;
+  long aa=cash.open(new CashAccountOpenRequest(key(),1L,customer,"CNY","INVOICE","test"));
+  long bb=cash.open(new CashAccountOpenRequest(key(),1L,customer,"CNY","NO_INVOICE","test"));
+  long lotA=balances.transfer(transfer(scopedLine("INVOICE","-20"),"20"));
+  long lotB=balances.transfer(transfer(scopedLine("NO_INVOICE","-9"),"9"));
+  long accountA=account(lotA),accountB=account(lotB);
+  assertThat(accountA).isNotEqualTo(accountB);
+  assertThat(balances.lotDetail(new com.punjab.oms.ar.domain.query.finance.BalanceDetailQuery(lotA,1L)).cashAccountId()).isEqualTo(aa);
+  assertThat(balances.detail(new com.punjab.oms.ar.domain.query.finance.BalanceDetailQuery(accountB,1L)).cashAccountId()).isEqualTo(bb);
+  long a=group(scopedLine("INVOICE","10")),b=group(scopedLine("NO_INVOICE","10"));
+  var cross=preview(accountA,"3",a,b);
+  assertThatThrownBy(()->spending.preview(cross)).isInstanceOf(ServiceException.class).hasMessageContaining("同一现金账户");
+  var same=preview(accountA,"3",a);
+  long settlement=spending.confirm(new BalanceSettlementConfirmRequest(key(),same,spending.preview(same).fingerprint(),"spend"));
+  assertThat(balance(accountA)).isEqualByComparingTo("17");assertThat(used(lotB)).isEqualByComparingTo("0");
+  settlements.reverse(new SettlementReverseRequest(key(),1L,settlement,"undo"));
+  assertThat(used(lotA)).isEqualByComparingTo("0");
+  balances.reverseTransfer(new BalanceTransferReverseRequest(key(),1L,lotA,"undo"));
+  assertThat(balance(accountA)).isEqualByComparingTo("0");assertThat(balance(accountB)).isEqualByComparingTo("9");
  }
  private long group(long line){return jdbc.queryForObject("SELECT group_id FROM oms_ar_line WHERE id=?",Long.class,line);}
  private BigDecimal open(long line){return jdbc.queryForObject("SELECT open_amount FROM oms_ar_line WHERE id=?",BigDecimal.class,line);}

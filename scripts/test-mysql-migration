@@ -8,7 +8,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parent.parent
 settings = dict(line.split('=', 1) for line in (root / '.env').read_text().splitlines() if line and not line.startswith('#'))
 prefix = 'oms_ar_migration_' + uuid.uuid4().hex[:12]
-databases = [prefix + '_' + suffix for suffix in ['fresh', 'upgrade', 'tamper', 'unmanaged', 'failure'] + ['contract_' + name for name in ['baseline', 'column', 'index', 'foreignkey', 'check', 'table', 'version']]]
+databases = [prefix + '_' + suffix for suffix in ['fresh', 'upgrade', 'tamper', 'unmanaged', 'failure', 'cutover'] + ['contract_' + name for name in ['baseline', 'column', 'index', 'foreignkey', 'check', 'table', 'version']]]
 def admin(sql):
     result = subprocess.run(['docker', 'exec', '-i', 'oms-ar-mysql-1', 'sh', '-c', 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot -N -B'], input=sql, text=True, capture_output=True)
     if result.returncode:
@@ -23,7 +23,7 @@ try:
     export = sys.argv[1:] == ['--export-contract']
     if sys.argv[1:] and not export:
         raise ValueError('Only --export-contract is supported')
-    selection = 'SchemaContractRealTest#baseline' if export else 'MigrationRealTest,SchemaContractRealTest'
+    selection = 'SchemaContractRealTest#baseline' if export else 'MigrationRealTest,SchemaContractRealTest,CashCutoverRealTest'
     result = subprocess.call([str(root / 'scripts/mvn-java21'), '-B', '-Dmaven.repo.local=work/m2', '-pl', 'oms-ar-server', f'-Dtest={selection}', '-Dar.schema-contract.real=true', '-Dar.schema-contract.real.commit=true', f'-Dar.schema.contract.export={str(export).lower()}', '-Dar.migration.real=true', '-Dar.migration.real.commit=true', 'test'], cwd=root, env=env)
 finally:
     for database in created:

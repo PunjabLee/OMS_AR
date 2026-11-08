@@ -1,6 +1,6 @@
 {
   "mysqlVersion" : "8.0.42",
-  "migrationVersion" : "019",
+  "migrationVersion" : "020",
   "tableHashes" : {
     "oms_ar_adjustment_link" : "6071600de4cba07a25bce02bc1ddaa61aba3b1d6ef46c8d53c1d0e72a70e00c4",
     "oms_ar_balance_lot" : "517cf13ed5b4075b2ccbc563d76e255d20ce6d77a6263df6da39bc0d924b69eb",
@@ -8,6 +8,7 @@
     "oms_ar_balance_usage" : "1c528e8f6f22cc3ba3ec32b2720314913833fa45d304f77da64bace15e4e8edb",
     "oms_ar_business_group" : "3b863584b9950787bb307656f597c5d0154fe31985afea2ad4a1aa26279374c4",
     "oms_ar_cash_account" : "3b2eb08d20ba13705e27128cea461302be1c8121277d1ac58963e1d801693147",
+    "oms_ar_cash_cutover" : "b4756c701a9d3eef861a0fe452c892c68c1f292791bf44f0756a017488be274f",
     "oms_ar_cash_group_binding" : "98492311d28caa7bdcdf43e2d5b66f4e368b66fcbed09c7addfb3822e3d14748",
     "oms_ar_cash_hold" : "647355414b0e5a002c5200b152557e538a7e07782a6ae204cb649b3d36bc165b",
     "oms_ar_cash_hold_slice" : "2306b52373d0a45f472202e54fbe6606b905deeba18e2a9ff167e86192d8ef59",

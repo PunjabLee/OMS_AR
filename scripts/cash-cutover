@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+jar_path="${AR_SERVER_JAR:-oms-ar-server/target/oms-ar-server-0.1.0-SNAPSHOT.jar}"
+jdk_dir="${AR_JDK_HOME:-/Users/punjab/Library/Java/JavaVirtualMachines/ms-21.0.13.0.2/Contents/Home}"
+exec "$jdk_dir/bin/java" -Dloader.main=com.punjab.oms.ar.tools.CashCutover -cp "$jar_path" org.springframework.boot.loader.launch.PropertiesLauncher "$@"

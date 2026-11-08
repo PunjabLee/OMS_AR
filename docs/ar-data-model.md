@@ -83,7 +83,7 @@ outbox保存事件ID、主体、逻辑目的地及JSON payload，事件/目的�
 
 创建应收、收款、核销及反核销、余额转入及撤销、开票及撤销、作废均在提交前入队，失败回滚整个业务事务。已完成请求重放返回原结果，不重复创建事件或通知。主体来自创建请求的授权结果或JournalTicket，不从快照文本猜测。逻辑目的地固定FINANCE_EVENTS，代表该主体的可信财务集成端，可包含同主体多个客户的完整变化，不能作为按客户过滤的外发订阅使用。
 
-payload外层schemaVersion=1，包含eventId、legalEntityId、destination、完整event及按变化ID排序的changes；before/delta/afterSnapshot均为JSON结构，保留对象ID、前后版本、反向事件等追溯字段。当前仅保存队列，没有外发网络调用。后续发送须直接使用存储payload，不按最新业务数据重建。
+payload外层schemaVersion=1，包含eventId、legalEntityId、destination、完整event及按变化ID排序的changes；before/delta/afterSnapshot均为JSON结构，保留对象ID、前后版本、反向事件等追溯字段。默认关闭外部派发。部署启用派发并配置接收端后，派发服务使用已保存的 payload 投递和重试。
 
 新事件event.schemaVersion=2：快照中的小数以精确十进制文本保存（包括金额、税率和汇率），整数仍可为JSON数值；读取方须使用十进制解析，同时兼容整数数值。这样避免MySQL JSON将大额小数转为二进制浮点而舍入。业务DECIMAL列、普通业务接口金额类型和幂等请求摘要不变。历史schemaVersion=1流水保持原样，不尝试凭当前余额重建历史精度；旧流水中已发生的舍入无法由此修复。对账JSON_VALUE(... RETURNING DECIMAL)兼容两种表示。
 

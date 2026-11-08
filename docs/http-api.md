@@ -26,7 +26,7 @@ Authorization请求头格式：`Bearer <token>`。身份与权限来自服务端
 
 ## 收款
 
-POST `/api/finance/receipts/create`登记收款，要求 `ar:receipt:create`；GET `/api/finance/receipts/detail?id=...&legalEntityId=...`查询原额、已分配、可用余额及版本，要求 `ar:read`。登记请求包含requestKey/customerId/legalEntityId/currency/amount/receivedDate/sourceSystem/sourceId/sourceNo，来源在主体内唯一。登记行为仅代表授权收款系统确认的实际收款，不调用银行，不伪造银行确认。
+POST `/api/finance/receipts/create`登记收款，要求 `ar:receipt:create`；GET `/api/finance/receipts/detail?id=...&legalEntityId=...`查询原额、已分配、可用余额及版本，要求 `ar:read`。登记请求包含requestKey/customerId/legalEntityId/currency/amount/receivedDate/sourceSystem/sourceId/sourceNo，来源在主体内唯一。分户范围还必须传 cashAccountId，详情的可用额已扣除核销、冻结、提现及冲正。登记行为仅代表授权收款系统确认的实际收款，不调用银行，不伪造银行确认。
 
 ## 收款核销
 
@@ -50,7 +50,7 @@ POST `/api/finance/offsets/confirm`：`requestKey`、原 `preview` 请求、`exp
 
 ## 客户信用余额转入
 
-POST `/api/finance/customer-balances/transfer`：`requestKey`、`legalEntityId`、`negativeLineId`、正数 `amount`、`expectedLineVersion`、`reason`，要求 `ar:balance:transfer`。版本来自应收详情；可将待核销负数余额部分或全部转入，返回来源批次ID。按客户、主体和币种自动开户；同一负数可拆分多批转入。转入减少负数未核销余额并增加负数已转入金额的绝对值，已核销金额保持原值；账户余额不属于实收。
+POST `/api/finance/customer-balances/transfer`：`requestKey`、`legalEntityId`、`negativeLineId`、正数 `amount`、`expectedLineVersion`、`reason`，要求 `ar:balance:transfer`。版本来自应收详情；可将待核销负数余额部分或全部转入，返回来源批次ID。按客户、主体和币种自动建立信用账户，已分户范围再按来源现金账户独立开户；同一负数可拆分多批转入。转入减少负数未核销余额并增加负数已转入金额的绝对值，已核销金额保持原值；账户余额不属于实收。
 
 GET `/api/finance/customer-balances/lot-detail?id=批次ID&legalEntityId=主体ID` 返回来源应收行、账户ID、批次原额、已使用金额、状态及版本。GET `/api/finance/customer-balances/detail?id=账户ID&legalEntityId=主体ID` 返回账户余额和版本，两者要求 `ar:read`。
 

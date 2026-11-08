@@ -64,6 +64,6 @@ Files：scratch/dbddl/V001__ar_schema.sql、docs/ar-data-model.md、oms-ar-serve
 
 ## 验收状态（2026-11-03核对）
 
-基础阶段已完成；历史红灯和绿灯记录见docs/progress.md任务1、2a、3a、4b。任务2的正负净额零状态测试按已记录裁定迁至ReceivableCreateRealTest.netZeroNotSettled；重复账户测试随客户余额阶段实现。DDL按业务阶段拆分，正式迁移现为V001—V012。
+基础阶段已完成；历史红灯和绿灯记录见docs/progress.md任务1、2a、3a、4b。任务2的正负净额零状态测试按已记录裁定迁至ReceivableCreateRealTest.netZeroNotSettled；重复账户测试随客户余额阶段实现。DDL按业务阶段拆分，该阶段交付的正式迁移为 V001—V012；后续发布版本见[数据库迁移说明](../../database-migrations.md)。
 
 Java21、MySQL8.0.42已验证，分支feature/ar-foundation；配置测试、11项纯分配测试及真实数据库约束测试已通过。2026-11-03统一验证入口scripts/verify-local全部通过，记录work/local-verification-final.log。该基础阶段完成不代表最终全分支验收完成，最终状态见2026-11-02-ar-migration-release.md。

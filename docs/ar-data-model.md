@@ -19,7 +19,7 @@
 | settlement | V004 | 类型、receipt_id、范围、amount、strategy、fingerprint、status、version | 核销单；receipt_id仅收款型使用 |
 | settlement_allocation | V004 | settlement_id、sequence_no、positive_line_id、negative_line_id、amount_type、amount | 正数分配金额与双方应收 |
 | adjustment_link | V005 | line_id、related_group_id、original_line_id | 负数的原组与可选原行，不随资金去向变化 |
-| customer_account | V006 | 范围、balance_amount、version | 信用可用余额，三重范围唯一 |
+| customer_account | V006 | 范围、balance_amount、version | 信用余额；V018 起按主体、客户、币种和 cash_scope_key 唯一，历史未分户键为 0 |
 | balance_lot | V006 | account_id、source_line_id、范围、amount、used_amount、status、version | 一次转入一个批次 |
 | balance_settlement | V007 | settlement_id、account_id | BALANCE核销对应账户 |
 | balance_usage | V007 | settlement_id、allocation_id、lot_id、sequence_no、amount | 应收分配与来源批次多对多桥接 |

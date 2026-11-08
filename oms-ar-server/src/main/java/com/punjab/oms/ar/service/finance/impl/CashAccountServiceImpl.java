@@ -65,14 +65,29 @@ public class CashAccountServiceImpl implements CashAccountService {
         return transition(request,"STOPPED","ACTIVE","ar:cash:resume","CASH_ACCOUNT_RESUMED");
     }
 
+    /** 清零后销户，锁内检查全部未结依赖。 */
+    @Transactional(rollbackFor=Exception.class,isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
+    public Long close(CashStatusRequest request) {
+        return transition(request,null,"CLOSED","ar:cash:close","CASH_ACCOUNT_CLOSED");
+    }
+
+    /** 在历史账户ID上恢复使用，沿用全部历史批次和核销记录。 */
+    @Transactional(rollbackFor=Exception.class)
+    public Long reopen(CashStatusRequest request) {
+        return transition(request,"CLOSED","ACTIVE","ar:cash:reopen","CASH_ACCOUNT_REOPENED");
+    }
+
     /** 锁定账户并复核状态及版本，状态变更与金额快照在同一事务提交。 */
     private Long transition(CashStatusRequest request,String from,String to,String permission,String action) {
         validate(request);
         var ticket=journal.begin(new JournalBeginRequest(request.legalEntityId(),permission,action,request.requestKey(),values.json(request)));
         if(ticket.resultReference()!=null) return ticket.resultReference();
         var row=accounts.account(request.accountId(),request.legalEntityId(),true);
-        if(row==null || !from.equals(row.getStatus()) || !request.expectedVersion().equals(row.getVersion()))
+        if(row==null || (from==null ? "CLOSED".equals(row.getStatus()) : !from.equals(row.getStatus())) || !request.expectedVersion().equals(row.getVersion()))
             throw new ServiceException("现金账户状态或版本已变化，请刷新");
+        if ("CLOSED".equals(to) && (row.getBookAmount().signum()!=0 || row.getFrozenAmount().signum()!=0
+                || accounts.hasOpenDependencies(row.getId())))
+            throw new ServiceException("销户前须解除未结应收、现金与信用余额及在途提现");
         String before=values.json(row);
         long previous=row.getVersion();
         row.setStatus(to);

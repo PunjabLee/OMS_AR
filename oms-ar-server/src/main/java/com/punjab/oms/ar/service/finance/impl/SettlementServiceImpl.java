@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
 /** 收款核销统一事务：按组锁定、预览指纹校验、原分配逆向恢复。 @author Punjab */
 @Service @RequiredArgsConstructor
 public class SettlementServiceImpl implements SettlementService {
+ private final CashGroupOwnership ownership;
  private final CashReceiptPosting cash;
  private final SettlementDao dao;
  private final BalanceSettlementService balanceSettlements;
@@ -87,6 +88,10 @@ public class SettlementServiceImpl implements SettlementService {
   var references=dao.linesByIds(ids,false);
   if(references.size()!=ids.size())throw new ServiceException("原应收明细缺失");
   var groupIds=references.stream().map(ArLine::getGroupId).distinct().sorted().toList();
+  if("OFFSET".equals(settlement.getSettlementType())){
+   var owners=ownership.groupAccounts(request.legalEntityId(),settlement.getCustomerId(),settlement.getCurrency(),groupIds);
+   owners.values().stream().map(ArCashAccount::getId).distinct().sorted().forEach(id->ownership.lockOpen(id,request.legalEntityId()));
+  }
   var groups=dao.groups(groupIds,request.legalEntityId(),true);
   if(groups.size()!=groupIds.size() || groups.stream().anyMatch(g->!settlement.getCustomerId().equals(g.getCustomerId()) || !settlement.getCurrency().equals(g.getCurrency())))throw new ServiceException("原核销业务组范围不一致");
   var locked=dao.linesByIds(ids,true).stream().collect(Collectors.toMap(ArLine::getId,Function.identity()));

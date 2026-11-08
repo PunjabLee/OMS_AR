@@ -24,6 +24,14 @@ public class CashAccountController {
     public ApiReturn<com.punjab.oms.ar.domain.vo.finance.CashSettlementView.Posted> confirm(@Valid @RequestBody BalanceSettlementConfirmRequest request) {
         return ApiReturn.of(settlements.confirm(request));
     }
+    @Operation(summary="关闭现金账户",description="关闭现金账户") @PostMapping("/close")
+    public ApiReturn<Long> close(@Valid @RequestBody CashStatusRequest request) {
+        return ApiReturn.of(service.close(request));
+    }
+    @Operation(summary="恢复现金账户",description="恢复现金账户") @PostMapping("/reopen")
+    public ApiReturn<Long> reopen(@Valid @RequestBody CashStatusRequest request) {
+        return ApiReturn.of(service.reopen(request));
+    }
     @Operation(summary="整户止付",description="整户止付") @PostMapping("/stop")
     public ApiReturn<Long> stop(@Valid @RequestBody CashStatusRequest request) {
         return ApiReturn.of(service.stop(request));

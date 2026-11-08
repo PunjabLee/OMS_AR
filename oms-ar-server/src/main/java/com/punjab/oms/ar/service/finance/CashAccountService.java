@@ -8,6 +8,8 @@ import com.punjab.oms.ar.domain.vo.finance.CashAccountResponse;
 public interface CashAccountService {
     Long stop(CashStatusRequest request);
     Long resume(CashStatusRequest request);
+    Long close(CashStatusRequest request);
+    Long reopen(CashStatusRequest request);
     Long open(CashAccountOpenRequest request);
     CashAccountResponse detail(BalanceDetailQuery query);
 }

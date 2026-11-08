@@ -63,6 +63,7 @@ public class CashAccountDaoImpl extends CrudRepository<ArCashAccountMapper,ArCas
                 .set(ArCashAccount::getUpdatedTime,account.getUpdatedTime()).set(ArCashAccount::getUpdatedBy,account.getUpdatedBy()).update();
     }
 
+    public boolean hasOpenDependencies(Long id) { return baseMapper.hasOpenDependencies(id); }
     public boolean updateStatus(ArCashAccount row, Long previousVersion) {
         return lambdaUpdate().eq(ArCashAccount::getId,row.getId()).eq(ArCashAccount::getVersion,previousVersion)
                 .set(ArCashAccount::getStatus,row.getStatus()).set(ArCashAccount::getVersion,row.getVersion())

@@ -46,6 +46,7 @@ public class BalanceSettlementServiceImpl implements BalanceSettlementService {
   var source=sources.source(settlement.getId());if(source==null)throw new ServiceException("原核销账户记录缺失");
   var account=balances.account(source.getAccountId(),request.legalEntityId(),true);
   if(account==null || !account.getCustomerId().equals(settlement.getCustomerId()) || !account.getCurrency().equals(settlement.getCurrency()))throw new ServiceException("原核销账户范围不一致");
+  if(account.getCashAccountId()!=null) ownership.lockOpen(account.getCashAccountId(),request.legalEntityId());
   var usages=sources.usages(settlement.getId());var allocations=settlements.allocations(settlement.getId());
   if(usages.isEmpty() || allocations.isEmpty())throw new ServiceException("原核销分配缺失");
   var lotIds=usages.stream().map(ArBalanceUsage::getLotId).distinct().sorted().toList();var lots=sources.lots(lotIds,true);

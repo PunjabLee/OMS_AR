@@ -53,9 +53,9 @@ def main():
     env = {k: v for k, v in os.environ.items() if not k.startswith(('DB_', 'AR_', 'SPRING_', 'SERVER_'))}
     env.update(DB_URL=f'jdbc:mysql://127.0.0.1:13306/{database}', DB_USERNAME='oms_ar', DB_PASSWORD=password,
                AR_JDK_HOME=settings.get('AR_JDK_HOME', DEFAULT_JDK), AR_API_TOKEN=token, AR_API_USER='startup-verification',
-               AR_LEGAL_ENTITIES='1', AR_PERMISSIONS='ar:payout:manage,ar:withdraw:apply,ar:withdraw:review,ar:withdraw:pay,ar:withdraw:read,ar:cash:freeze,ar:cash:unfreeze,ar:cash:stop,ar:cash:resume,ar:cash:open,ar:cash:read,ar:create,ar:read,ar:receipt:create,ar:settle,ar:reverse,ar:invoice:write,ar:void,ar:outbox:read,ar:outbox:retry',
+               AR_LEGAL_ENTITIES='1', AR_PERMISSIONS='ar:cash:close,ar:cash:reopen,ar:payout:manage,ar:withdraw:apply,ar:withdraw:review,ar:withdraw:pay,ar:withdraw:read,ar:cash:freeze,ar:cash:unfreeze,ar:cash:stop,ar:cash:resume,ar:cash:open,ar:cash:read,ar:create,ar:read,ar:receipt:create,ar:settle,ar:reverse,ar:invoice:write,ar:void,ar:outbox:read,ar:outbox:retry',
                SERVER_ADDRESS='127.0.0.1', SERVER_PORT='0', AR_OUTBOX_ENABLED='false', AR_OUTBOX_SCHEDULING_ENABLED='false',
-               AR_CASH_BINDING_SCOPES='1/7/CNY', AR_DATABASE_VERIFY_SCHEMA='true', SPRING_FLYWAY_ENABLED='true', SPRING_PROFILES_ACTIVE='')
+               AR_CASH_BINDING_SCOPES='1/7/CNY,1/8/CNY', AR_DATABASE_VERIFY_SCHEMA='true', SPRING_FLYWAY_ENABLED='true', SPRING_PROFILES_ACTIVE='')
     reviewer_token = secrets.token_urlsafe(36)
     env['SPRING_APPLICATION_JSON'] = json.dumps({'ar': {'auth': {'clients': [
         dict(token=token, username=env['AR_API_USER'], permissions=env['AR_PERMISSIONS'].split(','), legalEntities=[1]),
@@ -217,6 +217,17 @@ def main():
         finally:
             sql(f'UPDATE oms_ar_cash_account SET book_amount=book_amount-1 WHERE id={aa}')
         assert api(port,path,recon)['total'] == 0
+        closing = api(port,'cash-accounts/open',dict(opening,customerId=8,requestKey=key()))
+        def lifecycle(op,account,status=200):
+            row = api(port,f'cash-accounts/detail?id={account}&legalEntityId=1')
+            return api(port,'cash-accounts/'+op,dict(legalEntityId=1,accountId=account,requestKey=key(),
+                       expectedVersion=row['version'],reason='销户验收'),status=status)
+        lifecycle('close',aa,409)
+        lifecycle('close',ab,409)
+        assert lifecycle('close',closing) == closing
+        api(port,'receipts/create',dict(deposit,customerId=8,cashAccountId=closing,requestKey=key(),sourceId=key()),status=409)
+        assert lifecycle('reopen',closing) == closing
+        assert api(port,'cash-accounts/detail?id='+str(closing)+'&legalEntityId=1')['status'] == 'ACTIVE'
         report['checks'].append('withdrawal: independent review, offline payment, unknown result, capture and release')
         report['checks'].append('cash stop/resume: both debit paths blocked, deposits accepted and replay safe')
         report['checks'].append('shared receipt lots: direct limit, FIFO split, stale requests and original receipt reversal')

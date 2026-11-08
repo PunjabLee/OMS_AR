@@ -20,6 +20,7 @@ public class CustomerBalanceServiceImpl implements CustomerBalanceService {
   var seed=values.initialize(new ArCustomerAccount(),ticket.actor());seed.setCustomerId(line.getCustomerId());seed.setLegalEntityId(line.getLegalEntityId());seed.setCurrency(line.getCurrency());
   var origins=ownership.groupAccounts(line.getLegalEntityId(),line.getCustomerId(),line.getCurrency(),List.of(line.getGroupId()));
   if (!origins.isEmpty()) seed.setCashAccountId(origins.get(line.getGroupId()).getId());
+  if(seed.getCashAccountId()!=null) ownership.lockOpen(seed.getCashAccountId(),request.legalEntityId());
   var account=dao.reserve(seed);if(account==null)throw new ServiceException("客户账户不可用");
   receivables.group(line.getGroupId());line=receivables.line(line.getId(),true);checkLine(line,request.legalEntityId());
   if(!line.getVersion().equals(request.expectedLineVersion()) || line.getOpenAmount().negate().compareTo(request.amount())<0)throw new ServiceException("应收版本已变化或可转入余额不足");
@@ -39,6 +40,7 @@ public class CustomerBalanceServiceImpl implements CustomerBalanceService {
   var account=dao.account(lot.getAccountId(),request.legalEntityId(),true);if(account==null)throw new ServiceException("客户账户不存在");
   lot=dao.lot(lot.getId(),request.legalEntityId(),true);
   if("REVERSED".equals(lot.getStatus())){journal.complete(ticket,lot.getId());return lot.getId();}
+  if(account.getCashAccountId()!=null) ownership.lockOpen(account.getCashAccountId(),request.legalEntityId());
   if(lot.getUsedAmount().signum()!=0)throw new ServiceException("该批次已被抵扣，请先撤销对应余额核销");
   var line=receivables.line(lot.getSourceLineId(),false);checkLine(line,request.legalEntityId());receivables.group(line.getGroupId());line=receivables.line(line.getId(),true);checkLine(line,request.legalEntityId());
   var changes=new ArrayList<JournalEventRequest.Change>();changes.add(moveLine(line,lot.getAmount().negate(),ticket.actor()));changes.add(moveAccount(account,lot.getAmount().negate(),ticket.actor()));

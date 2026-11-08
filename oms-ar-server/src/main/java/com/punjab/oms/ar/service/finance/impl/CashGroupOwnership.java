@@ -41,6 +41,13 @@ public class CashGroupOwnership {
         return result;
     }
 
+    /** 锁定有资金或应收变化的归属账户，与销户串行。 */
+    public ArCashAccount lockOpen(Long id,Long scope) {
+        var account=accounts.account(id,scope,true);
+        if(account==null || "CLOSED".equals(account.getStatus())) throw new ServiceException("账户已关闭，请先恢复");
+        return account;
+    }
+
     /** 同一新组可由一条明细指定属性，其余行共同继承。关联调整从原行所在组继承。 */
     public Map<String, ArCashAccount> resolve(ReceivableCreateRequest request, Map<Long,ArLine> originals) {
         String scope = request.legalEntityId() + "/" + request.customerId() + "/" + request.currency();
@@ -73,6 +80,8 @@ public class CashGroupOwnership {
             if (prior != null && !prior.getId().equals(account.getId()))
                 throw new ServiceException("同一业务组不能绑定多个账户");
         }
+        result.values().stream().map(ArCashAccount::getId).distinct().sorted()
+                .forEach(id->lockOpen(id,request.legalEntityId()));
         for (var line : request.lines()) {
             var account = result.get(line.groupKey());
             if (account == null) throw new ServiceException("新增业务组必须选择开票属性");

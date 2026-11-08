@@ -68,6 +68,7 @@ public class CashReceiptPosting {
 
     /** 带版本更新账面额并形成同一财务事件中的账户快照。 */
     public Change move(ArCashAccount account, BigDecimal delta, String actor) {
+        if("CLOSED".equals(account.getStatus())) throw new ServiceException("请先恢复现金账户");
         String before=values.json(account);
         long version=account.getVersion();
         var book=account.getBookAmount().add(delta);

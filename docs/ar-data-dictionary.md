@@ -1,6 +1,6 @@
 # OMS 应收系统数据字典
 
-适用版本为 MySQL 8.0.42，范围为正式迁移 V001–V019 的 29 张业务表，共 418 个列定义。下方可按中文名称跳转到对应物理表。
+适用版本为 MySQL 8.0.42，范围为正式迁移 V001–V020 的 30 张业务表，共 428 个列定义。下方可按中文名称跳转到对应物理表。
 
 ## 读表约定
 
@@ -43,6 +43,7 @@
 | [受托收款档案](#oms_ar_payout_account) | `oms_ar_payout_account` | V017 |
 | [提现申请及线下付款](#oms_ar_withdrawal) | `oms_ar_withdrawal` | V017 |
 | [充值整批冲正](#oms_ar_cash_receipt_reversal) | `oms_ar_cash_receipt_reversal` | V019 |
+| [现金分户切换登记](#oms_ar_cash_cutover) | `oms_ar_cash_cutover` | V020 |
 
 <a id="oms_ar_document"></a>
 
@@ -1022,6 +1023,26 @@
 - `CONSTRAINT fk_cash_reversal_operation FOREIGN KEY(operation_id) REFERENCES oms_ar_operation_request(id)`
 - `CONSTRAINT ck_cash_reversal_amount CHECK(amount>0)`
 
-## V020 切换表
+<a id="oms_ar_cash_cutover"></a>
 
-此版本预留给历史资金切换。表名、字段及约束待正式迁移落盘后登记。
+## 现金分户切换登记 · `oms_ar_cash_cutover`
+
+迁移来源 [V020__ar_cash_cutover.sql](../oms-ar-server/src/main/resources/db/migration/V020__ar_cash_cutover.sql)。
+
+| 字段 | 中文含义 | MySQL 类型 | 允许 NULL | 显式默认值 | 附加定义 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | 本表自增主键 | `BIGINT` | 否 | — | `AUTO_INCREMENT PRIMARY KEY` |
+| `legal_entity_id` | 核算主体ID，也是权限范围 | `BIGINT` | 否 | — | — |
+| `customer_id` | 账户所属客户 ID | `BIGINT` | 否 | — | — |
+| `currency` | 结算币种代码 | `CHAR(3)` | 否 | — | — |
+| `manifest_hash` | 切换清单的 SHA-256 摘要 | `CHAR(64)` | 否 | — | — |
+| `fingerprint` | 执行时复核的预演指纹 | `CHAR(64)` | 否 | — | — |
+| `manifest` | 本次执行的切换清单 | `JSON` | 否 | — | — |
+| `opening_report` | 切换时的期初核对报告 | `JSON` | 否 | — | — |
+| `created_by` | 创建记录的操作人 | `VARCHAR(100)` | 否 | — | — |
+| `created_time` | 记录创建时间 | `DATETIME(6)` | 否 | `CURRENT_TIMESTAMP(6)` | — |
+
+**索引与约束**
+
+- `PRIMARY KEY(id)`
+- `UNIQUE KEY uk_cutover_scope(legal_entity_id,customer_id,currency)`

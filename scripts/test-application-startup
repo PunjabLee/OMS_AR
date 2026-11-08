@@ -53,7 +53,7 @@ def main():
     env = {k: v for k, v in os.environ.items() if not k.startswith(('DB_', 'AR_', 'SPRING_', 'SERVER_'))}
     env.update(DB_URL=f'jdbc:mysql://127.0.0.1:13306/{database}', DB_USERNAME='oms_ar', DB_PASSWORD=password,
                AR_JDK_HOME=settings.get('AR_JDK_HOME', DEFAULT_JDK), AR_API_TOKEN=token, AR_API_USER='startup-verification',
-               AR_LEGAL_ENTITIES='1', AR_PERMISSIONS='ar:cash:close,ar:cash:reopen,ar:payout:manage,ar:withdraw:apply,ar:withdraw:review,ar:withdraw:pay,ar:withdraw:read,ar:cash:freeze,ar:cash:unfreeze,ar:cash:stop,ar:cash:resume,ar:cash:open,ar:cash:read,ar:create,ar:read,ar:receipt:create,ar:settle,ar:reverse,ar:invoice:write,ar:void,ar:outbox:read,ar:outbox:retry',
+               AR_LEGAL_ENTITIES='1', AR_PERMISSIONS='ar:cash:deposit:reverse,ar:cash:close,ar:cash:reopen,ar:payout:manage,ar:withdraw:apply,ar:withdraw:review,ar:withdraw:pay,ar:withdraw:read,ar:cash:freeze,ar:cash:unfreeze,ar:cash:stop,ar:cash:resume,ar:cash:open,ar:cash:read,ar:create,ar:read,ar:receipt:create,ar:settle,ar:reverse,ar:invoice:write,ar:void,ar:outbox:read,ar:outbox:retry',
                SERVER_ADDRESS='127.0.0.1', SERVER_PORT='0', AR_OUTBOX_ENABLED='false', AR_OUTBOX_SCHEDULING_ENABLED='false',
                AR_CASH_BINDING_SCOPES='1/7/CNY,1/8/CNY', AR_DATABASE_VERIFY_SCHEMA='true', SPRING_FLYWAY_ENABLED='true', SPRING_PROFILES_ACTIVE='')
     reviewer_token = secrets.token_urlsafe(36)
@@ -95,8 +95,8 @@ def main():
         admin(f"GRANT ALL PRIVILEGES ON `{database}`.* TO 'oms_ar'@'%';")
         process, log = start('cold')
         port = ready(process, log)
-        assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '18'
-        report['checks'].append('cold startup: automatic 18-version migration and schema validation')
+        assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '19'
+        report['checks'].append('cold startup: automatic 19-version migration and schema validation')
         api(port, 'receivables/detail?id=1&legalEntityId=1', status=401, authenticated=False)
         opening = dict(requestKey=key(), customerId=7, legalEntityId=1, currency='CNY', invoiceMode='INVOICE', reason='开户验收')
         aa = api(port, 'cash-accounts/open', opening)
@@ -208,6 +208,16 @@ def main():
         check_holds(api,port,key,aa,receipt_aa,direct,fifo,ab)
         report['checks'].append('cash holds: FIFO slices, partial release, replay and settlement isolation')
         check_withdrawal(api,port,key,aa,None)
+        reverse_deposit = dict(requestKey=key(),legalEntityId=1,receiptId=receipt_aa,reason='充值冲正验收')
+        api(port,'receipts/reverse-deposit',reverse_deposit,status=409)  # 已提现的首批
+        unused = api(port,'receipts/create',dict(deposit,cashAccountId=ab,amount=20,requestKey=key(),sourceId=key()))
+        reverse_deposit.update(receiptId=unused,requestKey=key())
+        assert api(port,'receipts/reverse-deposit',reverse_deposit) == unused
+        assert api(port,'receipts/reverse-deposit',reverse_deposit) == unused
+        assert cash_amount(ab) == 0
+        reverted = api(port,f'receipts/detail?id={unused}&legalEntityId=1')
+        assert reverted['reversedAmount'] == 20 and reverted['availableAmount'] == 0
+        report['checks'].append('deposit reversal: spent or withdrawn funds protected, original cash and receipt reversed once')
         recon = dict(legalEntityId=1,customerId=7,currency='CNY',size=200)
         path = 'cash-accounts/reconciliation/page'
         assert api(port,path,recon)['total'] == 0
@@ -281,7 +291,7 @@ def main():
         process, log = start('restart')
         port = ready(process, log)
         assert api(port, f'receivables/detail?id={document}&legalEntityId=1')['document']['status'] == 'VOID'
-        assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '18'
+        assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '19'
         report['checks'].append('restart preserves business data and migration history')
         stop(process)
         sql('ALTER TABLE oms_ar_document MODIFY doc_no VARCHAR(65) NOT NULL;')

@@ -60,6 +60,7 @@ public class CashReceiptPosting {
         if (!"ACTIVE".equals(account.getStatus()) || account.getAvailableAmount().compareTo(amount)<0)
             throw new ServiceException("账户已止付或可用现金不足");
         var lot=dao.receiptLot(receipt.getId());
+        if(dao.reversed(lot.getId())) throw new ServiceException("收款已冲正");
         var free=receipt.getAmount().subtract(receipt.getAllocatedAmount()).subtract(lot.getFrozenAmount()).subtract(lot.getWithdrawnAmount());
         if (free.compareTo(amount)<0) throw new ServiceException("原收款批次可用金额不足");
         for (Long group : groups)

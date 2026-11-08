@@ -10,4 +10,8 @@ public class ReceiptController {
  public ApiReturn<Long> create(@Valid @RequestBody ReceiptCreateRequest request){return ApiReturn.of(service.create(request));}
  @GetMapping("/detail") @Operation(summary="查询收款余额",description="查询收款余额")
  public ApiReturn<ReceiptResponse> detail(@Valid @ModelAttribute ReceiptDetailQuery query){return ApiReturn.of(service.detail(query));}
+ @PostMapping("/reverse-deposit") @Operation(summary="整批冲正充值",description="整批冲正充值")
+ public ApiReturn<Long> reverseDeposit(@Valid @RequestBody com.punjab.oms.ar.domain.dto.finance.CashDepositReverseRequest request) {
+     return ApiReturn.of(service.reverseDeposit(request));
+ }
 }

@@ -46,7 +46,7 @@ public class CashAccountDaoImpl extends CrudRepository<ArCashAccountMapper,ArCas
     public java.util.List<ArCashReceiptLot> fifo(Long accountId) {
         return lots.selectList(com.baomidou.mybatisplus.core.toolkit.Wrappers.<ArCashReceiptLot>lambdaQuery()
                 .eq(ArCashReceiptLot::getCashAccountId,accountId).eq(ArCashReceiptLot::getDeleteStatus,false)
-                .orderByAsc(ArCashReceiptLot::getId));
+                .notExists("SELECT 1 FROM oms_ar_cash_receipt_reversal rev WHERE rev.lot_id=oms_ar_cash_receipt_lot.id").orderByAsc(ArCashReceiptLot::getId));
     }
     public String batchSnapshot(Long eventId, Long operationId) {
         var row=changes.selectOne(com.baomidou.mybatisplus.core.toolkit.Wrappers
@@ -55,6 +55,12 @@ public class CashAccountDaoImpl extends CrudRepository<ArCashAccountMapper,ArCas
                 .eq(com.punjab.oms.ar.domain.entity.finance.ArChange::getObjectType,"CASH_SETTLEMENT_BATCH")
                 .eq(com.punjab.oms.ar.domain.entity.finance.ArChange::getObjectId,operationId));
         return row==null?null:row.getAfterSnapshot();
+    }
+    public Long reversalId(Long lotId) { return lots.reversalId(lotId); }
+    public Long originalReceiptEvent(Long receiptId) { return lots.originalEvent(receiptId); }
+    public boolean reversed(Long lotId) { return lots.reversed(lotId); }
+    public boolean markReversed(Long lotId,Long operationId,java.math.BigDecimal amount,String reason,String actor) {
+        return lots.reverse(lotId,operationId,amount,reason,actor)==1;
     }
     public boolean insertLot(ArCashReceiptLot lot) { return lots.insert(lot)==1; }
     public boolean updateBook(ArCashAccount account, Long expectedVersion) {

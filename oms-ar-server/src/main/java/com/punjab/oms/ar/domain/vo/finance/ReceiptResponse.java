@@ -32,4 +32,5 @@ public record ReceiptResponse(
     /** 此收款批次尚在冻结的金额。 */
     BigDecimal frozenAmount,
     /** 此收款批次已完成提现的金额。 */
-    BigDecimal withdrawnAmount){}
+    BigDecimal withdrawnAmount,
+    /** 充值已整批冲回的金额。 */ BigDecimal reversedAmount){}

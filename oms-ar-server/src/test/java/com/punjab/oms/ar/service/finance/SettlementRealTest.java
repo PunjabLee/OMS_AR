@@ -17,7 +17,7 @@ class SettlementRealTest {
  private void actor(){CurrentUser.set(new CurrentUser.Identity("settlement-integration",Set.of(1L),Set.of("ar:create","ar:read","ar:receipt:create","ar:settle","ar:reverse")));}
  @BeforeEach void setup()throws Exception{
   assertThat(jdbc.queryForObject("SELECT DATABASE()",String.class)).isEqualTo("oms_ar_test");
-  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql","V011__ar_outbox.sql","V003__ar_receipt.sql","V013__ar_cash_account.sql","V015__ar_cash_receipt_lot.sql","V004__ar_settlement.sql","V005__ar_adjustment_link.sql","V009__ar_exchange_basis.sql","V010__ar_source_guard.sql")){
+  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql","V011__ar_outbox.sql","V003__ar_receipt.sql","V013__ar_cash_account.sql","V015__ar_cash_receipt_lot.sql","V019__ar_cash_receipt_reversal.sql","V004__ar_settlement.sql","V005__ar_adjustment_link.sql","V009__ar_exchange_basis.sql","V010__ar_source_guard.sql")){
    var file=Path.of("../scratch/dbddl/"+name);if(!Files.exists(file))continue;for(String sql:Files.readString(file).split(";"))if(!sql.isBlank())jdbc.execute(sql);
   }actor();
  }

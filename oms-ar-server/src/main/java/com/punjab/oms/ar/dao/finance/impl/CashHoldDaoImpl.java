@@ -21,7 +21,7 @@ public class CashHoldDaoImpl implements CashHoldDao {
   return accounts.selectOne(q);
  }
  public List<ArCashReceiptLot> lots(Long account){
-  return lots.selectList(new LambdaQueryWrapper<ArCashReceiptLot>().eq(ArCashReceiptLot::getCashAccountId,account).eq(ArCashReceiptLot::getDeleteStatus,false).orderByAsc(ArCashReceiptLot::getId).last("FOR UPDATE"));
+  return lots.selectList(new LambdaQueryWrapper<ArCashReceiptLot>().eq(ArCashReceiptLot::getCashAccountId,account).eq(ArCashReceiptLot::getDeleteStatus,false).notExists("SELECT 1 FROM oms_ar_cash_receipt_reversal rev WHERE rev.lot_id=oms_ar_cash_receipt_lot.id").orderByAsc(ArCashReceiptLot::getId).last("FOR UPDATE"));
  }
  public ArCashReceiptLot lot(Long id,Long account){
   return lots.selectOne(new LambdaQueryWrapper<ArCashReceiptLot>().eq(ArCashReceiptLot::getId,id).eq(ArCashReceiptLot::getCashAccountId,account).eq(ArCashReceiptLot::getDeleteStatus,false).last("FOR UPDATE"));

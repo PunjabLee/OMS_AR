@@ -12,6 +12,10 @@ public interface CashAccountDao {
     ArCashReceiptLot receiptLot(Long receipt);
     java.util.List<ArCashReceiptLot> fifo(Long cashAccountId);
     String batchSnapshot(Long eventId, Long operationId);
+    Long reversalId(Long lotId);
+    Long originalReceiptEvent(Long receiptId);
+    boolean reversed(Long lotId);
+    boolean markReversed(Long lotId,Long operationId,java.math.BigDecimal amount,String reason,String actor);
     boolean insertLot(ArCashReceiptLot lot);
     boolean updateBook(ArCashAccount account, Long expectedVersion);
     boolean hasOpenDependencies(Long id);

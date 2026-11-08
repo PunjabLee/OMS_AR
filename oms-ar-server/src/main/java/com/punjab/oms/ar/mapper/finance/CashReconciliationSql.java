@@ -9,8 +9,9 @@ public final class CashReconciliationSql {
           SELECT * FROM oms_ar_cash_account WHERE legal_entity_id=#{legalEntityId}
             AND customer_id=#{customerId} AND currency=#{currency} AND delete_status=false
         ), lots AS (
-          SELECT l.*,r.amount,r.allocated_amount FROM accounts a JOIN oms_ar_cash_receipt_lot l
+          SELECT l.*,r.amount-COALESCE(rev.amount,0) AS amount,r.allocated_amount FROM accounts a JOIN oms_ar_cash_receipt_lot l
             ON l.cash_account_id=a.id JOIN oms_ar_receipt r ON r.id=l.receipt_id
+            LEFT JOIN oms_ar_cash_receipt_reversal rev ON rev.lot_id=l.id
             WHERE l.delete_status=false AND r.delete_status=false
         ), holds AS (
           SELECT h.* FROM accounts a JOIN oms_ar_cash_hold h ON h.cash_account_id=a.id AND h.delete_status=false

@@ -9,6 +9,7 @@ import java.util.List;
 public interface CashHistoryMapper {
     String LOTS = """
          FROM oms_ar_cash_receipt_lot l JOIN oms_ar_receipt r ON r.id=l.receipt_id
+         LEFT JOIN oms_ar_cash_receipt_reversal rev ON rev.lot_id=l.id
          WHERE l.cash_account_id=#{accountId} AND l.legal_entity_id=#{legalEntityId}
            AND l.delete_status=false AND r.delete_status=false
         """;
@@ -23,8 +24,8 @@ public interface CashHistoryMapper {
     @Select("SELECT COUNT(*)"+ENTRIES) long countEntries(CashHistoryScope query);
     @Select("""
         SELECT l.id AS lotId,r.id AS receiptId,r.source_no,r.amount,r.allocated_amount AS allocated,
-               l.frozen_amount AS frozen,l.withdrawn_amount AS withdrawn,
-               r.amount-r.allocated_amount-l.frozen_amount-l.withdrawn_amount AS available
+               l.frozen_amount AS frozen,l.withdrawn_amount AS withdrawn,COALESCE(rev.amount,0) AS reversedAmount,
+               r.amount-COALESCE(rev.amount,0)-r.allocated_amount-l.frozen_amount-l.withdrawn_amount AS available
         """+LOTS+" ORDER BY l.id DESC"+PAGE)
     List<CashLotRow> lots(CashHistoryScope query);
     @Select("""

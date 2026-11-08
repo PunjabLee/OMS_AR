@@ -11,4 +11,5 @@ public record CashLotRow(
     /** 已核销额。 */ BigDecimal allocated,
     /** 冻结金额。 */ BigDecimal frozen,
     /** 已提现额。 */ BigDecimal withdrawn,
+    /** 已整批冲正金额。 */ BigDecimal reversedAmount,
     /** 可用额。 */ BigDecimal available) {}

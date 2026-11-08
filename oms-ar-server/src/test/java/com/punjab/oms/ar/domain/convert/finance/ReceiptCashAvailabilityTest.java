@@ -14,7 +14,7 @@ class ReceiptCashAvailabilityTest {
         var receipt=new ArReceipt();
         receipt.setAmount(new BigDecimal("100"));
         receipt.setAllocatedAmount(new BigDecimal("60"));
-        var view=Mappers.getMapper(ReceiptConverter.class).toResponse(receipt,8L,BigDecimal.TEN,new BigDecimal("5"));
+        var view=Mappers.getMapper(ReceiptConverter.class).toResponse(receipt,8L,BigDecimal.TEN,new BigDecimal("5"),BigDecimal.ZERO);
         assertThat(view.availableAmount()).isEqualByComparingTo("25");
         assertThat(view.cashAccountId()).isEqualTo(8L);
         assertThat(view.frozenAmount()).isEqualByComparingTo("10");

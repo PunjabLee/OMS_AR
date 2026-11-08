@@ -3,6 +3,8 @@ package com.punjab.oms.ar.tools;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.*;
 import com.punjab.oms.ar.mapper.finance.ReconciliationSql;
+import com.punjab.oms.ar.mapper.finance.CashReconciliationSql;
+import com.punjab.oms.ar.common.utils.FinanceSnapshotJson;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.*;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -35,7 +37,7 @@ public final class CashCutover {
         digest=MessageDigest.getInstance("SHA-256");
         require(m.legalEntityId>0 && m.customerId>0 && m.currency!=null && m.currency.matches("[A-Z]{3}")
                 && m.actor!=null && !m.actor.isBlank() && m.actor.length()<=100 && m.reason!=null && !m.reason.isBlank()
-                && m.groups!=null && m.receipts!=null,"清单须包含范围、操作人、原因、groups 与 receipts");
+                && m.reason.length()<=500 && m.groups!=null && m.receipts!=null,"清单须包含范围、操作人、原因、groups 与 receipts");
     }
 
     public static void main(String[] args) throws Exception {
@@ -80,18 +82,20 @@ public final class CashCutover {
         var report=plan();
         String fingerprint=HexFormat.of().formatHex(digest.digest());
         report.put("fingerprint",fingerprint);
-        if(!apply)return json(report);
+        if(!apply)return reportJson(report);
         require(fingerprint.equals(expected),"数据或清单已变化，请重新试算");
+        var journal=new CashOpeningJournal(db,m);
+        var before=journal.accounts();
         persist();
+        report.put("eventId",journal.record(fingerprint,before));
         report.put("applied",true);
         db.update("INSERT INTO oms_ar_cash_cutover(legal_entity_id,customer_id,currency,manifest_hash,fingerprint,manifest,opening_report,created_by) VALUES(?,?,?,?,?,?,?,?)",
-                m.legalEntityId,m.customerId,m.currency,manifestHash,fingerprint,manifest,json(report),m.actor);
-        return json(report);
+                m.legalEntityId,m.customerId,m.currency,manifestHash,fingerprint,manifest,reportJson(report),m.actor);
+        return reportJson(report);
     }
     Map<String,Object> plan(){
-        var differences=ReconciliationSql.count().replace("#{legalEntityId}",Long.toString(m.legalEntityId))
-                .replace("#{customerId}",Long.toString(m.customerId)).replace("#{currency}","'"+m.currency+"'");
-        require(db.queryForObject(differences,Long.class)==0,"历史对账存在差异，请按范围查询对账明细并修复");
+        verifyReconciled(ReconciliationSql.count());
+        verifyReconciled(CashReconciliationSql.count());
         var accounts=scoped("cash_account","id,invoice_mode,status,book_amount,frozen_amount,version");
         var existingBook=new HashMap<Long,BigDecimal>();var existingFrozen=new HashMap<Long,BigDecimal>();
         for(var a:accounts){
@@ -145,6 +149,14 @@ public final class CashCutover {
         creditPlan(lineOwners);
         var report=new TreeMap<String,Object>();report.put("cashBook",cash);report.put("creditBalance",credit);
         report.put("groupCount",m.groups.size());report.put("receiptCount",m.receipts.size());report.put("applied",false);return report;
+    }
+    private String reportJson(Map<String,Object> report) {
+        return new FinanceSnapshotJson(JSON).normalize(json(report));
+    }
+    private void verifyReconciled(String sql) {
+        String query=sql.replace("#{legalEntityId}", Long.toString(m.legalEntityId))
+                .replace("#{customerId}", Long.toString(m.customerId)).replace("#{currency}", "'"+m.currency+"'");
+        require(db.queryForObject(query,Long.class)==0,"历史对账存在差异，请按范围查询对账明细并修复");
     }
     void invoice(Long owner,long id){require(owner!=null && "INVOICE".equals(modes.get(owner)),"税额或历史发票映射至不开票账户 "+id);}
     void validateKeys(List<Map<String,Object>> rows,Map<Long,Long> mapping,String kind){

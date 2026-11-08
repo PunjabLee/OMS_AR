@@ -72,9 +72,12 @@ class CashCutoverRealTest {
         var stale=task(gs,rm);
         assertThatThrownBy(()->tx.execute(st->stale.run(true,"0".repeat(64)))).hasMessageContaining("重新试算");
         var commit=task(gs,rm);String result=tx.execute(st->commit.run(true,fingerprint));
-        assertThat(CashCutover.JSON.readTree(result).path("cashBook").get(""+aa).decimalValue()).isEqualByComparingTo("43");
+        assertThat(new BigDecimal(CashCutover.JSON.readTree(result).path("cashBook").get(""+aa).asText())).isEqualByComparingTo("43");
         var replay=task(gs,rm);
         assertThat(CashCutover.JSON.readTree(replay.run(true,fingerprint)).path("applied").asBoolean()).isTrue();
+        long openingEvent=CashCutover.JSON.readTree(result).path("eventId").asLong();
+        assertThat(db.queryForObject("SELECT COUNT(*) FROM oms_ar_outbox WHERE event_id=? AND status='PENDING'",Long.class,openingEvent)).isEqualTo(1);
+        assertThat(db.queryForObject("SELECT JSON_VALUE(after_snapshot,'$.bookAmount' RETURNING DECIMAL(24,8)) FROM oms_ar_lifecycle_change WHERE event_id=? AND object_type='CASH_ACCOUNT' AND object_id=?",BigDecimal.class,openingEvent,aa)).isEqualByComparingTo("43");
         long scoped=db.queryForObject("SELECT account_id FROM oms_ar_balance_lot WHERE id=?",Long.class,lot);
         assertThat(scoped).isNotEqualTo(legacy);
         assertThat(db.queryForObject("SELECT balance_amount FROM oms_ar_customer_account WHERE id=?",BigDecimal.class,scoped)).isEqualByComparingTo("14");

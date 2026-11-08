@@ -208,6 +208,15 @@ def main():
         check_holds(api,port,key,aa,receipt_aa,direct,fifo,ab)
         report['checks'].append('cash holds: FIFO slices, partial release, replay and settlement isolation')
         check_withdrawal(api,port,key,aa,None)
+        recon = dict(legalEntityId=1,customerId=7,currency='CNY',size=200)
+        path = 'cash-accounts/reconciliation/page'
+        assert api(port,path,recon)['total'] == 0
+        sql(f'UPDATE oms_ar_cash_account SET book_amount=book_amount+1 WHERE id={aa}')
+        try:
+            assert 'CASH_BOOK' in {row['rule'] for row in api(port,path,recon)['records']}
+        finally:
+            sql(f'UPDATE oms_ar_cash_account SET book_amount=book_amount-1 WHERE id={aa}')
+        assert api(port,path,recon)['total'] == 0
         report['checks'].append('withdrawal: independent review, offline payment, unknown result, capture and release')
         report['checks'].append('cash stop/resume: both debit paths blocked, deposits accepted and replay safe')
         report['checks'].append('shared receipt lots: direct limit, FIFO split, stale requests and original receipt reversal')

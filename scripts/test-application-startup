@@ -53,9 +53,14 @@ def main():
     env = {k: v for k, v in os.environ.items() if not k.startswith(('DB_', 'AR_', 'SPRING_', 'SERVER_'))}
     env.update(DB_URL=f'jdbc:mysql://127.0.0.1:13306/{database}', DB_USERNAME='oms_ar', DB_PASSWORD=password,
                AR_JDK_HOME=settings.get('AR_JDK_HOME', DEFAULT_JDK), AR_API_TOKEN=token, AR_API_USER='startup-verification',
-               AR_LEGAL_ENTITIES='1', AR_PERMISSIONS='ar:cash:stop,ar:cash:resume,ar:cash:open,ar:cash:read,ar:create,ar:read,ar:receipt:create,ar:settle,ar:reverse,ar:invoice:write,ar:void,ar:outbox:read,ar:outbox:retry',
+               AR_LEGAL_ENTITIES='1', AR_PERMISSIONS='ar:payout:manage,ar:withdraw:apply,ar:withdraw:review,ar:withdraw:pay,ar:withdraw:read,ar:cash:freeze,ar:cash:unfreeze,ar:cash:stop,ar:cash:resume,ar:cash:open,ar:cash:read,ar:create,ar:read,ar:receipt:create,ar:settle,ar:reverse,ar:invoice:write,ar:void,ar:outbox:read,ar:outbox:retry',
                SERVER_ADDRESS='127.0.0.1', SERVER_PORT='0', AR_OUTBOX_ENABLED='false', AR_OUTBOX_SCHEDULING_ENABLED='false',
                AR_CASH_BINDING_SCOPES='1/7/CNY', AR_DATABASE_VERIFY_SCHEMA='true', SPRING_FLYWAY_ENABLED='true', SPRING_PROFILES_ACTIVE='')
+    reviewer_token = secrets.token_urlsafe(36)
+    env['SPRING_APPLICATION_JSON'] = json.dumps({'ar': {'auth': {'clients': [
+        dict(token=token, username=env['AR_API_USER'], permissions=env['AR_PERMISSIONS'].split(','), legalEntities=[1]),
+        dict(token=reviewer_token, username='startup-reviewer', permissions=['ar:withdraw:review','ar:withdraw:read'], legalEntities=[1])
+    ]}}})
     process = None
     logs = []
     created = False
@@ -67,10 +72,10 @@ def main():
         return proc, log
     def sql(statement):
         return admin(f'USE `{database}`; ' + statement)
-    def api(port, path, body=None, status=200, authenticated=True):
+    def api(port, path, body=None, status=200, authenticated=True, reviewer=False):
         headers = {'Content-Type': 'application/json'}
         if authenticated:
-            headers['Authorization'] = 'Bearer ' + token
+            headers['Authorization'] = 'Bearer ' + (reviewer_token if reviewer else token)
         request = Request(f'http://127.0.0.1:{port}/api/finance/{path}', data=None if body is None else json.dumps(body).encode(), headers=headers)
         try:
             with urlopen(request, timeout=10) as response:
@@ -90,8 +95,8 @@ def main():
         admin(f"GRANT ALL PRIVILEGES ON `{database}`.* TO 'oms_ar'@'%';")
         process, log = start('cold')
         port = ready(process, log)
-        assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '15'
-        report['checks'].append('cold startup: automatic 15-version migration and schema validation')
+        assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '18'
+        report['checks'].append('cold startup: automatic 18-version migration and schema validation')
         api(port, 'receivables/detail?id=1&legalEntityId=1', status=401, authenticated=False)
         opening = dict(requestKey=key(), customerId=7, legalEntityId=1, currency='CNY', invoiceMode='INVOICE', reason='开户验收')
         aa = api(port, 'cash-accounts/open', opening)
@@ -192,6 +197,18 @@ def main():
         assert cash_amount(aa) == 181
         switch_cash('resume')
         assert api(port,'cash-accounts/settlements/preview',fifo)['usedAmount'] == 60
+        history = dict(legalEntityId=1,accountId=aa,page=1,size=200)
+        batches = api(port,'cash-accounts/lots/page',history)
+        assert batches['total'] == 3 and sum(lot['available'] for lot in batches['records']) == 181
+        ledger = api(port,'cash-accounts/ledger/page',history)
+        assert ledger['records'][0]['bookAfter'] == 181 and ledger['records'][-1]['bookBefore'] is None
+        api(port,'cash-accounts/ledger/page',dict(history,legalEntityId=2),status=403)
+        from startup_holds import check as check_holds
+        from startup_withdrawal import check as check_withdrawal
+        check_holds(api,port,key,aa,receipt_aa,direct,fifo,ab)
+        report['checks'].append('cash holds: FIFO slices, partial release, replay and settlement isolation')
+        check_withdrawal(api,port,key,aa,None)
+        report['checks'].append('withdrawal: independent review, offline payment, unknown result, capture and release')
         report['checks'].append('cash stop/resume: both debit paths blocked, deposits accepted and replay safe')
         report['checks'].append('shared receipt lots: direct limit, FIFO split, stale requests and original receipt reversal')
         report['checks'].append('receipt deposits: idempotent posting, scoped settlement and exact reversal')
@@ -244,7 +261,7 @@ def main():
         process, log = start('restart')
         port = ready(process, log)
         assert api(port, f'receivables/detail?id={document}&legalEntityId=1')['document']['status'] == 'VOID'
-        assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '15'
+        assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '18'
         report['checks'].append('restart preserves business data and migration history')
         stop(process)
         sql('ALTER TABLE oms_ar_document MODIFY doc_no VARCHAR(65) NOT NULL;')

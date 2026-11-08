@@ -1,6 +1,6 @@
 {
   "mysqlVersion" : "8.0.42",
-  "migrationVersion" : "015",
+  "migrationVersion" : "018",
   "tableHashes" : {
     "oms_ar_adjustment_link" : "6071600de4cba07a25bce02bc1ddaa61aba3b1d6ef46c8d53c1d0e72a70e00c4",
     "oms_ar_balance_lot" : "517cf13ed5b4075b2ccbc563d76e255d20ce6d77a6263df6da39bc0d924b69eb",
@@ -9,8 +9,10 @@
     "oms_ar_business_group" : "3b863584b9950787bb307656f597c5d0154fe31985afea2ad4a1aa26279374c4",
     "oms_ar_cash_account" : "3b2eb08d20ba13705e27128cea461302be1c8121277d1ac58963e1d801693147",
     "oms_ar_cash_group_binding" : "98492311d28caa7bdcdf43e2d5b66f4e368b66fcbed09c7addfb3822e3d14748",
+    "oms_ar_cash_hold" : "647355414b0e5a002c5200b152557e538a7e07782a6ae204cb649b3d36bc165b",
+    "oms_ar_cash_hold_slice" : "2306b52373d0a45f472202e54fbe6606b905deeba18e2a9ff167e86192d8ef59",
     "oms_ar_cash_receipt_lot" : "3b3de598a55134f7c17c4746abc34c20a18591c2859d50a7d9538886c03cd305",
-    "oms_ar_customer_account" : "d4f1e564e37743266bcefc932c89c42a1f2b06023a505df857a53c7417d13d7f",
+    "oms_ar_customer_account" : "e5aed1168f63dc7bab1009db5c323da40f9f698c405639fe62d756a240ee3bbc",
     "oms_ar_document" : "b3bad19440b554878d1d2113e05e967228e3aa8db96c06ec5c10834c9c4973b6",
     "oms_ar_exchange_basis" : "f3901fb7939410db343b78f6ee1d8add097fdef7602e250bac60c480ea30025d",
     "oms_ar_invoice" : "f38096ffdfd9090aefecefd9ac6d3231f1eccc670257079f199903abaa36a1fb",
@@ -22,9 +24,11 @@
     "oms_ar_operation_request" : "2f03c9013e11e230441acda43d591dd4601ac9d85aecba0fb56e0f218b8432ba",
     "oms_ar_outbox" : "f58b41ff633ab7fb2e3ba0d5314099cda409cf1ad018bfedb15e21719f836a29",
     "oms_ar_outbox_retry" : "c0190f6e1ba21a82b5ebea6eeef13a0fa408d20686b9d6cc94a0f58408a4b9bc",
+    "oms_ar_payout_account" : "24d5067f1626002e629fdb8708063c934f7a2182575d211ed1ac67088a104fe7",
     "oms_ar_receipt" : "be7cf9fcec4fda037402473656709b49a9eb8bcc8305c1750275f43fa86ea756",
     "oms_ar_settlement" : "6e61ea1b32f25f2d7d37b2ca29c46e43c16d1e172037a96ba6683018f8112d86",
     "oms_ar_settlement_allocation" : "af45d7b2c13688bf070e25514983e7af66150ee958274e0ed082223abff62beb",
-    "oms_ar_source_guard" : "e803b330ad2588a446336362c3b3fc0e15bf5be6f9836fcb50be195af9cc7e7a"
+    "oms_ar_source_guard" : "e803b330ad2588a446336362c3b3fc0e15bf5be6f9836fcb50be195af9cc7e7a",
+    "oms_ar_withdrawal" : "223f1324e11bfd3a3155f1299a58e0dee63dfdb79e8e5b978989e1d05b536559"
   }
 }

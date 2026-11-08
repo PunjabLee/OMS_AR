@@ -13,7 +13,7 @@ Java 21 / Spring Boot 3.5.0 / MySQL 8.0.42 后端。应收按价款、销项税�
 
 run-local将.env当作文本解析，不执行其中的命令、不展开变量；支持KEY=VALUE及成对单/双引号，值中的#和=保留为字面内容。进程环境变量优先于.env。DB_URL/DB_USERNAME/DB_PASSWORD可显式覆盖；未设置时使用本机oms_ar、oms_ar用户及MYSQL_PASSWORD。API令牌必填且至少32字符。密码和令牌仅通过子进程环境传入，不进入Java命令参数；数据库root密码不传给应用。
 
-启动时执行正式Flyway迁移，并校验21张业务表的结构摘要。无历史非空库、迁移文件变更或结构不一致会阻止启动，不自动清库或接管旧库。生产迁移资源位于oms-ar-server/src/main/resources/db/migration。详见[数据库迁移说明](docs/database-migrations.md)。
+启动时执行正式Flyway迁移，并校验30张业务表的结构摘要。无历史非空库、迁移文件变更或结构不一致会阻止启动，不自动清库或接管旧库。生产迁移资源位于oms-ar-server/src/main/resources/db/migration。详见[数据库迁移说明](docs/database-migrations.md)。
 
 ## 调用与权限
 
@@ -36,6 +36,8 @@ oms_ar_test用于业务夹具，首次自动创建，后续不清空；这些用
 也可单独执行scripts/test-mysql-all、scripts/test-mysql-migration和scripts/test-application-startup。默认mvn test不连接数据库，实际写库测试均有显式门禁。测试专用关闭迁移/结构校验配置不会打入应用JAR。
 
 ## 业务与开发手册
+
+[现金账户操作与接口](docs/cash-accounts.md)覆盖开户、充值、冻结、止付、提现、核销、冲正与分户查询。[历史账户切换](docs/cash-cutover.md)说明如何按客户核准期初余额。
 
 [上游单据关联查询与应收合表评估](docs/ar-source-query-comparison.md)
 

@@ -30,7 +30,7 @@ oms-ar-server/src/main/
     extapi/                  外部通知客户端
   resources/
     application.yml          环境变量配置
-    db/migration/            V001—V012正式迁移
+    db/migration/            V001—V020正式迁移
     db/schema-contract.json  实际表结构摘要基准
 ```
 
@@ -87,7 +87,7 @@ Controller不依赖DAO或Entity；Service接口不暴露Entity；Query必须转�
 
 阅读一个动作时按“Controller→请求DTO→Service→DAO/Mapper→迁移约束→对应RealTest”追踪。只读Service判断不了SQL是否有主体条件，必须检查DAO；只看DDL也无法证明跨表金额守恒。
 
-## 3. 数据模型：实际21张表
+## 3. 数据模型：核心应收21张表（分户扩展另见[完整数据字典](../ar-data-dictionary.md)）
 
 完整关系及复合外键列序见[数据实体 ER 图册](05-entity-relationships.md)。
 
@@ -204,7 +204,7 @@ schemaVersion=2的快照把JSON小数转换成十进制文本，整数保留数�
 3. 先补失败用例，再写实现。金额、锁、外键及事务必须有真实MySQL门禁测试；纯算法用默认JUnit测试。
 4. Service开启写事务，先预留幂等操作，再按已有顺序锁聚合；读取后重验，CAS零行即冲突回滚。
 5. 显式维护审计六字段；将业务关系、余额、前后快照、通知与幂等结果置于同一事务。
-6. 若新增结构，追加新V版本，不编辑已发布V001—V012；更新结构契约、迁移/漂移测试和实际表清单。
+6. 若新增结构，追加新V版本，不编辑已发布V001—V020；更新结构契约、迁移/漂移测试和实际表清单。
 7. DTO/Query经Converter到Entity/BO；DAO不返回Web VO，不自行开启业务事务；跨模块通过Service交互。
 8. 运行相应定向测试、默认测试及必要实库/启动回归，通过后同步手册并独立Git提交。
 

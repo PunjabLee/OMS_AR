@@ -1,6 +1,6 @@
 # MySQL 8.0.42 应收逻辑表设计
 
-本文按当前已落地的21张表说明数据模型，正式DDL以oms-ar-server/src/main/resources/db/migration/V001—V012为准。表名前缀oms_ar_；所有主键BIGINT自增。金额DECIMAL(24,8)，税率DECIMAL(12,8)，汇率DECIMAL(24,12)，业务金额仍须按币种精度校验。0税率与税率不适用NULL区分。
+本文按V001—V012 的21张核心表说明数据模型，现金分户扩展参见[现金账户手册](cash-accounts.md)，全量 30 张表见[数据字典](ar-data-dictionary.md)。本章核心表的正式DDL以oms-ar-server/src/main/resources/db/migration/V001—V012为准。表名前缀oms_ar_；所有主键BIGINT自增。金额DECIMAL(24,8)，税率DECIMAL(12,8)，汇率DECIMAL(24,12)，业务金额仍须按币种精度校验。0税率与税率不适用NULL区分。
 
 ## 已落地表清单
 

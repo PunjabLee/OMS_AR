@@ -11,7 +11,12 @@ public record CashSettlementView(
         /** 按组先税后价的目标。 */ List<AllocationPreviewResponse.Allocation> allocations,
         /** 按批次顺序列出资金来源。 */ List<Funding> funding) {
     /** 单个充值批次供应的资金。 @author Punjab */
-    public record Funding(Long lotId, Long receiptId, BigDecimal amount) {}
+    public record Funding(
+        /** 原充值批次编号。 */ Long lotId,
+        /** 提供本次核销资金的原收款单编号。 */ Long receiptId,
+        /** 该充值批次承担的核销金额。 */ BigDecimal amount) {}
     /** 每个来源收款对应的原始核销单，可按原单反核销。 @author Punjab */
-    public record Posted(Long eventId, List<Long> settlementIds) {}
+    public record Posted(
+        /** 本次账户核销对应的业务事件编号。 */ Long eventId,
+        /** 各出资收款单生成的核销单编号。 */ List<Long> settlementIds) {}
 }

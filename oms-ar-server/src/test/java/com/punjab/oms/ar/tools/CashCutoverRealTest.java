@@ -78,6 +78,9 @@ class CashCutoverRealTest {
         long openingEvent=CashCutover.JSON.readTree(result).path("eventId").asLong();
         assertThat(db.queryForObject("SELECT COUNT(*) FROM oms_ar_outbox WHERE event_id=? AND status='PENDING'",Long.class,openingEvent)).isEqualTo(1);
         assertThat(db.queryForObject("SELECT JSON_VALUE(after_snapshot,'$.bookAmount' RETURNING DECIMAL(24,8)) FROM oms_ar_lifecycle_change WHERE event_id=? AND object_type='CASH_ACCOUNT' AND object_id=?",BigDecimal.class,openingEvent,aa)).isEqualByComparingTo("43");
+        // 所有实例即使没有配置范围，也必须识别已提交的切换标记。
+        assertThatThrownBy(()->line("5")).hasMessageContaining("开票属性");
+        assertThatThrownBy(()->receipts.create(new ReceiptCreateRequest(key(),7L,1L,"CNY",n("9"),LocalDate.now(),"TEST",key(),key()))).isInstanceOf(com.punjab.oms.ar.base.ServiceException.class);
         long scoped=db.queryForObject("SELECT account_id FROM oms_ar_balance_lot WHERE id=?",Long.class,lot);
         assertThat(scoped).isNotEqualTo(legacy);
         assertThat(db.queryForObject("SELECT balance_amount FROM oms_ar_customer_account WHERE id=?",BigDecimal.class,scoped)).isEqualByComparingTo("14");

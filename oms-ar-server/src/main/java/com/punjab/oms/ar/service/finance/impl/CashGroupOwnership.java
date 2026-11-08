@@ -22,13 +22,13 @@ public class CashGroupOwnership {
 
     /** 判断结算范围是否已启用分户。 */
     public boolean enabled(Long scope, Long customer, String currency) {
-        return scopes.contains(scope + "/" + customer + "/" + currency);
+        return scopes.contains(scope + "/" + customer + "/" + currency) || accounts.cutoverComplete(scope,customer,currency);
     }
 
     /** 返回启用分户范围内每个业务组的归属，缺失映射时中止资金操作。 */
     public Map<Long,ArCashAccount> groupAccounts(Long legalEntityId, Long customerId, String currency,
                                                  Collection<Long> groupIds) {
-        if (!scopes.contains(legalEntityId + "/" + customerId + "/" + currency)) return Map.of();
+        if (!enabled(legalEntityId,customerId,currency)) return Map.of();
         Map<Long,ArCashAccount> result = new HashMap<>();
         Map<Long,ArCashAccount> cache = new HashMap<>();
         for (Long groupId : groupIds) {
@@ -50,8 +50,7 @@ public class CashGroupOwnership {
 
     /** 同一新组可由一条明细指定属性，其余行共同继承。关联调整从原行所在组继承。 */
     public Map<String, ArCashAccount> resolve(ReceivableCreateRequest request, Map<Long,ArLine> originals) {
-        String scope = request.legalEntityId() + "/" + request.customerId() + "/" + request.currency();
-        if (!scopes.contains(scope)) {
+        if (!enabled(request.legalEntityId(),request.customerId(),request.currency())) {
             if (request.lines().stream().anyMatch(line -> line.invoiceMode() != null))
                 throw new ServiceException("当前范围尚未启用现金账户归属");
             return Map.of();

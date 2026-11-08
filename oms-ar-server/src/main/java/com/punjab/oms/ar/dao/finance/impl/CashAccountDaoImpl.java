@@ -74,6 +74,9 @@ public class CashAccountDaoImpl extends CrudRepository<ArCashAccountMapper,ArCas
                 .eq(ArCashAccount::getCustomerId,scope.customerId()).eq(ArCashAccount::getCurrency,scope.currency())
                 .eq(ArCashAccount::getDeleteStatus,false).orderByAsc(ArCashAccount::getInvoiceMode).list();
     }
+    public boolean cutoverComplete(Long scope,Long customer,String currency) {
+        return baseMapper.cutoverComplete(scope,customer,currency);
+    }
     public boolean hasOpenDependencies(Long id) { return baseMapper.hasOpenDependencies(id); }
     public boolean updateStatus(ArCashAccount row, Long previousVersion) {
         return lambdaUpdate().eq(ArCashAccount::getId,row.getId()).eq(ArCashAccount::getVersion,previousVersion)

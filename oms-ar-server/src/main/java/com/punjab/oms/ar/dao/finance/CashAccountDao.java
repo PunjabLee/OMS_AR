@@ -5,6 +5,7 @@ import com.punjab.oms.ar.domain.entity.finance.ArCashReceiptLot;
 
 /** 现金账户持久化。 @author Punjab */
 public interface CashAccountDao {
+    boolean cutoverComplete(Long scope,Long customer,String currency);
     ArCashAccount byMode(Long customerId, Long legalEntityId, String currency, String invoiceMode);
     Long boundAccount(Long groupId);
     boolean bind(com.punjab.oms.ar.domain.entity.finance.ArCashGroupBinding binding);

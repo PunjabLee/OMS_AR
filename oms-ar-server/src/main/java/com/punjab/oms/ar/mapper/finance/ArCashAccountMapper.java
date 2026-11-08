@@ -6,6 +6,12 @@ import org.apache.ibatis.annotations.Mapper;
 
 /** 现金账户映射。 @author Punjab */
 @Mapper public interface ArCashAccountMapper extends BaseMapper<ArCashAccount> {
+    @org.apache.ibatis.annotations.Select("""
+        SELECT EXISTS(SELECT 1 FROM oms_ar_cash_cutover
+                      WHERE legal_entity_id=#{scope} AND customer_id=#{customer} AND currency=#{currency})
+        """)
+    boolean cutoverComplete(Long scope,Long customer,String currency);
+
     /** 账户锁下检查尚有余额的应收、信用和在途提现。 */
     @org.apache.ibatis.annotations.Select("""
         SELECT EXISTS(SELECT 1 FROM oms_ar_cash_group_binding b JOIN oms_ar_line l ON l.group_id=b.group_id

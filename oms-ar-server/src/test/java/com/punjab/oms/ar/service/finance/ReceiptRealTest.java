@@ -24,7 +24,7 @@ class ReceiptRealTest {
  @Autowired ReceiptService receipts;@Autowired JdbcTemplate jdbc;
  @BeforeEach void setup()throws Exception{
   assertThat(jdbc.queryForObject("SELECT DATABASE()",String.class)).isEqualTo("oms_ar_test");
-  for(String name:List.of("V001__ar_core.sql","V002__ar_audit.sql","V011__ar_outbox.sql","V003__ar_receipt.sql","V013__ar_cash_account.sql","V015__ar_cash_receipt_lot.sql","V019__ar_cash_receipt_reversal.sql","V005__ar_adjustment_link.sql","V009__ar_exchange_basis.sql","V010__ar_source_guard.sql")){
+  for(String name:List.of("V020__ar_cash_cutover.sql","V001__ar_core.sql","V002__ar_audit.sql","V011__ar_outbox.sql","V003__ar_receipt.sql","V013__ar_cash_account.sql","V015__ar_cash_receipt_lot.sql","V019__ar_cash_receipt_reversal.sql","V005__ar_adjustment_link.sql","V009__ar_exchange_basis.sql","V010__ar_source_guard.sql")){
    var file=Path.of("../scratch/dbddl/"+name);if(!Files.exists(file))continue;
    for(String sql:Files.readString(file).split(";"))if(!sql.isBlank())jdbc.execute(sql);
   }

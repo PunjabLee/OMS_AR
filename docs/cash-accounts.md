@@ -1,6 +1,6 @@
 # 现金账户与应收归属联调
 
-V013 引入现金账户，V014 引入业务组归属，V015 将实际收款唯一绑定至充值批次。当前联调覆盖开户、充值、按收款单或按账户核销、原核销单撤销、负数抵销和开票资格。冻结、提现、非现金信用余额分户及历史资金切换尚待完成。
+V013 引入现金账户，V014 引入业务组归属，V015 将实际收款唯一绑定至充值批次。当前联调覆盖开户、充值、按收款单或按账户核销、原核销单撤销、负数抵销和开票资格。V016–V019 已加入金额冻结、线下提现复核、非现金信用余额分户和充值冲正。历史存量范围仍需显式映射与切换验收。
 
 ## 账户与创建
 
@@ -25,3 +25,27 @@ scripts/test-mysql-migration 核对归属唯一性与跨客户外键。scripts/t
 账户核销按充值批次 ID 升序供资，每张实际出资收款形成一张 RECEIPT 核销单，在同一事务内全部提交。返回 eventId 与 settlementIds。相同请求重放返回相同列表。按 settlementIds 查询核销详情或调用原 settlements/reverse，可按原始收款和应收分配恢复金额；逐单反核销为独立事务。
 
 例：AA 收款 100 和 80，账户入口先核销 60 后，账户可用 120，第一张收款单最多直核 40。再从账户核销 55 时，两批分别供资 40、15，账户剩 65。上述场景及按原批次恢复已纳入打包应用测试。
+
+## 冻结、止付与账户生命周期
+
+金额冻结调用 `POST /api/finance/cash-accounts/freeze`，传入 legalEntityId、accountId、amount、requestKey 和 reason，要求 ar:cash:freeze。系统按原充值批次 FIFO 冻结，返回 holdId。同一账户可持有多张冻结单。`unfreeze` 另传 holdId，可以按原分摊部分释放。普通解冻仅限人工冻结单。`GET /api/finance/cash-accounts/holds/detail` 用主体、账户和冻结单 ID 查询各批次原冻结、累计释放及累计扣款。
+
+整户 stop、resume、close、reopen 均接收主体、账户、expectedVersion、requestKey 和 reason，分别使用对应的 ar:cash 权限。止付期间可入账和解除占用。销户要求账面及冻结额归零、信用余额归零、无未结应收和在途提现。恢复沿用同一个账户 ID。
+
+## 提现与充值冲正
+
+在 `/api/finance/withdrawals` 下，通过 payout-accounts/bind、payout-accounts/disable 维护受托付款档案。bind 保存受托受益人引用及尾号，detail 返回脱敏信息。apply 预留资金，approve 或 reject 要求独立财务身份，申请人可在付款认领前 cancel。claim 取得线下付款任务，result 由认领人登记 PAID、FAILED 或 UNKNOWN。成功要求唯一银行回单，失败释放须提供未付款凭据，结果未知时继续冻结。整户止付会阻止新认领，允许登记已经认领的结果。
+
+`POST /api/finance/receipts/reverse-deposit` 要求 ar:cash:deposit:reverse、legalEntityId、receiptId、requestKey 和 reason。仅原收款批次可整批冲回。存在核销或冻结时须先解除，已有实际提现的批次拒绝冲正。原收款仍可查询，reversedAmount 显示冲回金额，availableAmount 排除冲正、已核销、已提现及冻结额。
+
+## 查询与对账
+
+在 `/api/finance/cash-accounts` 下 POST lots/page 或 ledger/page，以 legalEntityId、accountId、page、size 查询每批资金来源和账户变动。POST reconciliation/page 则按 legalEntityId、customerId、currency、page、size 返回差异。三者均要求 ar:cash:read。专项对账覆盖账户账面与批次、冻结投影与原分摊、提现扣款与回单快照、收款占用与有效核销分配。
+
+V018 为非现金信用账户增加 cashAccountId。分户范围的负数转入、信用抵扣及其逆向动作均按原业务归属，现金余额与信用余额独立查询。
+
+## 当前交付状态
+
+2026-11-08 的 V019 完整本地回归已通过，包含默认测试、真实业务数据库、12 项正式迁移与结构测试和 13 组打包应用 HTTP 场景。主要新增场景包括跨批次冻结、部分解冻、止付、独立复核、重复回单拒绝、结果未知、原批次冲正、销户恢复及临时数据差异检测。运行记录位于 work/cash-v019-full.log。
+
+剩余验收包括按范围试算及切换历史数据、验证切换后原核销单可逆、同步最终版本数据字典与 ER 图，以及最终全计划逐项核对。

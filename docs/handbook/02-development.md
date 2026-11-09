@@ -30,7 +30,7 @@ oms-ar-server/src/main/
     extapi/                  外部通知客户端
   resources/
     application.yml          环境变量配置
-    db/migration/            V001—V020正式迁移
+    db/migration/            V001—V021正式迁移
     db/schema-contract.json  实际表结构摘要基准
 ```
 
@@ -204,7 +204,7 @@ schemaVersion=2的快照把JSON小数转换成十进制文本，整数保留数�
 3. 先补失败用例，再写实现。金额、锁、外键及事务必须有真实MySQL门禁测试；纯算法用默认JUnit测试。
 4. Service开启写事务，先预留幂等操作，再按已有顺序锁聚合；读取后重验，CAS零行即冲突回滚。
 5. 显式维护审计六字段；将业务关系、余额、前后快照、通知与幂等结果置于同一事务。
-6. 若新增结构，追加新V版本，不编辑已发布V001—V020；更新结构契约、迁移/漂移测试和实际表清单。
+6. 若新增结构，追加新V版本，不编辑已发布V001—V021；更新结构契约、迁移/漂移测试和实际表清单。
 7. DTO/Query经Converter到Entity/BO；DAO不返回Web VO，不自行开启业务事务；跨模块通过Service交互。
 8. 运行相应定向测试、默认测试及必要实库/启动回归，通过后同步手册并独立Git提交。
 

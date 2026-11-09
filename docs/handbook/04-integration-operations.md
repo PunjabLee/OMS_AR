@@ -339,9 +339,9 @@ flowchart TD
     V -->|是| READY[完成初始化 开放业务服务]
 ```
 
-正式迁移位于classpath:db/migration，当前001—020。禁止自动baseline/clean/repair，不自动接管非空无历史库。MySQL DDL可隐式提交，失败后可能已有部分结构，不能假定事务回滚恢复了全部DDL。
+正式迁移位于classpath:db/migration，当前001—021。禁止自动baseline/clean/repair，不自动接管非空无历史库。MySQL DDL可隐式提交，失败后可能已有部分结构，不能假定事务回滚恢复了全部DDL。
 
-新增版本流程：追加V021等更高SQL→扩展MigrationResourcesTest当前固定清单和同源校验→新增升级/约束测试→从正式迁移空库导出新结构契约（scripts/test-mysql-migration --export-contract）→审查契约与DDL差异→完整验收→独立提交。脚本及测试有当前20版本/30表的基线断言，升级时需逐一更新，不能只加SQL文件。
+新增版本流程：追加V022等更高SQL→扩展MigrationResourcesTest当前固定清单和同源校验→新增升级/约束测试→从正式迁移空库导出新结构契约（scripts/test-mysql-migration --export-contract）→审查契约与DDL差异→完整验收→独立提交。脚本及测试有当前21版本/30表的基线断言，升级时需逐一更新，不能只加SQL文件。
 
 结构校验比较SHOW CREATE TABLE摘要，包含列、索引、FK、CHECK及选项，仅去掉自增计数/换行差异。它不是自动修复，也不持续监控运行中的DDL。不要从已经漂移的业务库生成基准绕过检查。更多细节见[迁移说明](../database-migrations.md)。
 

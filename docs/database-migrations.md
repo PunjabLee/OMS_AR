@@ -1,6 +1,8 @@
 # 数据库版本迁移
 
-正式SQL位于oms-ar-server/src/main/resources/db/migration，当前V001至V020。应用使用Spring Boot管理的Flyway11.7.2及flyway-mysql模块，启动时迁移并校验历史文件。产物已包含全部20个版本。接入方式参照[Spring Boot 3.5官方初始化说明](https://docs.spring.io/spring-boot/3.5/how-to/data-initialization.html)。
+正式SQL位于oms-ar-server/src/main/resources/db/migration，当前V001至V021。应用使用Spring Boot管理的Flyway11.7.2及flyway-mysql模块，启动时迁移并校验历史文件。产物已包含全部21个版本。接入方式参照[Spring Boot 3.5官方初始化说明](https://docs.spring.io/spring-boot/3.5/how-to/data-initialization.html)。
+
+V021 为 30 张业务表及 428 个字段写入中文 COMMENT。可通过 SHOW CREATE TABLE、SHOW FULL COLUMNS 或 information_schema 查看。升级测试逐项对照[数据字典](ar-data-dictionary.md)，并比较 V020 和 V021 去除注释后的实际建表语句。
 
 ## 版本规则
 
@@ -23,7 +25,7 @@ Flyway历史文件校验使用迁移校验和，能够发现已执行文件变�
 
 ## 启动结构基准
 
-应用默认启用ar.database.verify-schema，在Flyway初始化之后执行只读校验。db/schema-contract.json保存MySQL8.0.42、当前迁移版本020及30张oms_ar_业务表的结构SHA-256；基准来自正式迁移新建的空库，不从已有业务库生成。
+应用默认启用ar.database.verify-schema，在Flyway初始化之后执行只读校验。db/schema-contract.json保存MySQL8.0.42、当前迁移版本021及30张oms_ar_业务表的结构SHA-256；基准来自正式迁移新建的空库，不从已有业务库生成。
 
 校验读取SHOW CREATE TABLE，包含列、类型/精度、默认值、索引、外键、CHECK及其执行状态、表选项；仅归一化换行并去掉表级AUTO_INCREMENT当前计数。新增/缺失业务表、结构变化、迁移版本不一致或MySQL版本不符均阻止初始化完成，并报告差异表名。Ubuntu等同版本发行版后缀不作为补丁版本的一部分比较。不会自动修改表、补约束或修复迁移历史。
 

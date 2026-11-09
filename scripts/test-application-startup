@@ -98,8 +98,8 @@ def main():
         admin(f"GRANT ALL PRIVILEGES ON `{database}`.* TO 'oms_ar'@'%';")
         process, log = start('cold')
         port = ready(process, log)
-        assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '20'
-        report['checks'].append('cold startup: automatic 20-version migration and schema validation')
+        assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '21'
+        report['checks'].append('cold startup: automatic 21-version migration and schema validation')
         api(port, 'receivables/detail?id=1&legalEntityId=1', status=401, authenticated=False)
         opening = dict(requestKey=key(), customerId=7, legalEntityId=1, currency='CNY', invoiceMode='INVOICE', reason='开户验收')
         aa = api(port, 'cash-accounts/open', opening)
@@ -307,7 +307,7 @@ def main():
         process, log = start('restart')
         port = ready(process, log)
         assert api(port, f'receivables/detail?id={document}&legalEntityId=1')['document']['status'] == 'VOID'
-        assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '20'
+        assert sql('SELECT COUNT(*) FROM flyway_schema_history WHERE success=1;') == '21'
         report['checks'].append('restart preserves business data and migration history')
         stop(process)
         sql('ALTER TABLE oms_ar_document MODIFY doc_no VARCHAR(65) NOT NULL;')
